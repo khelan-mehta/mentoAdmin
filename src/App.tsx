@@ -19,6 +19,7 @@ import {
   theme,
 } from "./components/Constants";
 import { Eye, EyeOff, Lock, Mail } from "lucide-react";
+import logo from './assets/image.png';
 
 // ==================== LOGIN COMPONENT ====================
 const LoginPage = ({ onLogin }: any) => {
@@ -84,7 +85,7 @@ const LoginPage = ({ onLogin }: any) => {
           className="flex flex-col justify-center items-center"
         >
           <img
-            src="../src/assets/image.png"
+            src={logo}
             alt="Logo"
             className="w-48 self-center"
           />

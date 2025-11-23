@@ -22,7 +22,7 @@ import {
   Bell,
   ChevronDown,
 } from "lucide-react";
-
+import logo from '../assets/image.png';
 // ==================== CONSTANTS ====================
 const theme = {
   colors: {
@@ -126,7 +126,7 @@ export const Sidebar = ({
             }}
           >
             <img
-              src="../src/assets/image.png"
+              src={logo}
               alt="Logo"
               className="w-24 self-center"
             />
