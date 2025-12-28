@@ -1,16 +1,5 @@
 import { useState } from "react";
-import {
-  Bookings,
-  Customers,
-  Dashboard,
-  FilterBar,
-  Modal,
-  Services,
-  SettingsPage,
-  Sidebar,
-  TopBar,
-  Workers,
-} from "./components/Components";
+
 import {
   initialBookings,
   initialCustomers,
@@ -20,6 +9,16 @@ import {
 } from "./components/Constants";
 import { Eye, EyeOff, Lock, Mail } from "lucide-react";
 import logo from './assets/image.png';
+import { Sidebar } from "./components/Sidebar";
+import { TopBar } from "./components/TopBar";
+import { Dashboard } from "./components/Dashboard";
+import { FilterBar } from "./components/FilterBar";
+import { Bookings } from "./components/Bookings";
+import { Workers } from "./components/Workers";
+import { Customers } from "./components/Customers";
+import { Services } from "./components/Services";
+import { SettingsPage } from "./components/SettingsPage";
+import { Modal } from "./components/Modal";
 
 // ==================== LOGIN COMPONENT ====================
 const LoginPage = ({ onLogin }: any) => {
