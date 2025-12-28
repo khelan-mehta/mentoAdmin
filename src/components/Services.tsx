@@ -13,6 +13,7 @@ import {
   Check,
   Layers,
 } from "lucide-react";
+import { iconMap } from "./iconMap";
 
 // ==================== CONSTANTS ====================
 const theme = {
@@ -114,8 +115,16 @@ const CategoryModal = ({
             alignItems: "center",
           }}
         >
-          <h2 style={{ margin: 0, fontSize: "18px", fontWeight: "700", color: theme.colors.text }}>
-            {category ? "Edit" : "Add"} {type === "category" ? "Category" : "Sub-Category"}
+          <h2
+            style={{
+              margin: 0,
+              fontSize: "18px",
+              fontWeight: "700",
+              color: theme.colors.text,
+            }}
+          >
+            {category ? "Edit" : "Add"}{" "}
+            {type === "category" ? "Category" : "Sub-Category"}
           </h2>
           <button
             onClick={onClose}
@@ -147,7 +156,9 @@ const CategoryModal = ({
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder={`Enter ${type === "category" ? "category" : "sub-category"} name`}
+              placeholder={`Enter ${
+                type === "category" ? "category" : "sub-category"
+              } name`}
               style={{
                 width: "100%",
                 padding: "12px",
@@ -287,7 +298,10 @@ const CategoryModal = ({
               }}
             >
               {isLoading ? (
-                <Loader2 size={16} style={{ animation: "spin 1s linear infinite" }} />
+                <Loader2
+                  size={16}
+                  style={{ animation: "spin 1s linear infinite" }}
+                />
               ) : (
                 <Check size={16} />
               )}
@@ -302,7 +316,13 @@ const CategoryModal = ({
 };
 
 // ==================== DELETE CONFIRMATION MODAL ====================
-const DeleteConfirmModal = ({ isOpen, onClose, onConfirm, itemName, isLoading }: any) => {
+const DeleteConfirmModal = ({
+  isOpen,
+  onClose,
+  onConfirm,
+  itemName,
+  isLoading,
+}: any) => {
   if (!isOpen) return null;
 
   return (
@@ -344,11 +364,25 @@ const DeleteConfirmModal = ({ isOpen, onClose, onConfirm, itemName, isLoading }:
           >
             <AlertCircle size={28} color={theme.colors.danger} />
           </div>
-          <h3 style={{ margin: "0 0 8px", fontSize: "18px", fontWeight: "700", color: theme.colors.text }}>
+          <h3
+            style={{
+              margin: "0 0 8px",
+              fontSize: "18px",
+              fontWeight: "700",
+              color: theme.colors.text,
+            }}
+          >
             Delete {itemName}?
           </h3>
-          <p style={{ margin: 0, color: theme.colors.textSecondary, fontSize: "14px" }}>
-            This action cannot be undone. Are you sure you want to delete this item?
+          <p
+            style={{
+              margin: 0,
+              color: theme.colors.textSecondary,
+              fontSize: "14px",
+            }}
+          >
+            This action cannot be undone. Are you sure you want to delete this
+            item?
           </p>
         </div>
 
@@ -388,7 +422,10 @@ const DeleteConfirmModal = ({ isOpen, onClose, onConfirm, itemName, isLoading }:
             }}
           >
             {isLoading ? (
-              <Loader2 size={16} style={{ animation: "spin 1s linear infinite" }} />
+              <Loader2
+                size={16}
+                style={{ animation: "spin 1s linear infinite" }}
+              />
             ) : (
               <Trash2 size={16} />
             )}
@@ -406,7 +443,9 @@ export const Services = () => {
   const [categories, setCategories] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
-  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(
+    new Set()
+  );
   const [searchQuery, setSearchQuery] = useState("");
 
   // Modal states
@@ -416,14 +455,18 @@ export const Services = () => {
   const [selectedSubcategory, setSelectedSubcategory] = useState<any>(null);
   const [parentCategoryId, setParentCategoryId] = useState<string | null>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<{ type: string; id: string; name: string } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<{
+    type: string;
+    id: string;
+    name: string;
+  } | null>(null);
 
   const fetchCategories = async () => {
     try {
       setLoading(true);
       const response = await fetch(`${API_BASE_URL}/category/all`, {
         headers: {
-          "Authorization": `Bearer ${localStorage.getItem("token") || ""}`,
+          Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
         },
       });
       if (response.ok) {
@@ -465,7 +508,7 @@ export const Services = () => {
         method,
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${localStorage.getItem("token") || ""}`,
+          Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
         },
         body: JSON.stringify(data),
       });
@@ -494,7 +537,7 @@ export const Services = () => {
         method,
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${localStorage.getItem("token") || ""}`,
+          Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
         },
         body: JSON.stringify(data),
       });
@@ -517,13 +560,17 @@ export const Services = () => {
 
     try {
       setActionLoading(true);
-      const endpoint = deleteTarget.type === "category" ? "categories" : "subcategories";
-      const response = await fetch(`${API_BASE_URL}/admin/${endpoint}/${deleteTarget.id}`, {
-        method: "DELETE",
-        headers: {
-          "Authorization": `Bearer ${localStorage.getItem("token") || ""}`,
-        },
-      });
+      const endpoint =
+        deleteTarget.type === "category" ? "categories" : "subcategories";
+      const response = await fetch(
+        `${API_BASE_URL}/admin/${endpoint}/${deleteTarget.id}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+          },
+        }
+      );
 
       if (response.ok) {
         setShowDeleteModal(false);
@@ -540,7 +587,9 @@ export const Services = () => {
   const filteredCategories = categories.filter(
     (cat) =>
       cat.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      cat.subcategories?.some((sub: any) => sub.name?.toLowerCase().includes(searchQuery.toLowerCase()))
+      cat.subcategories?.some((sub: any) =>
+        sub.name?.toLowerCase().includes(searchQuery.toLowerCase())
+      )
   );
 
   return (
@@ -579,7 +628,12 @@ export const Services = () => {
               <Search
                 size={18}
                 color={theme.colors.textSecondary}
-                style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)" }}
+                style={{
+                  position: "absolute",
+                  left: "12px",
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                }}
               />
               <input
                 type="text"
@@ -623,20 +677,36 @@ export const Services = () => {
 
         {loading ? (
           <div style={{ textAlign: "center", padding: "40px" }}>
-            <Loader2 size={32} color={theme.colors.primary} style={{ animation: "spin 1s linear infinite" }} />
-            <p style={{ marginTop: "12px", color: theme.colors.textSecondary }}>Loading categories...</p>
+            <Loader2
+              size={32}
+              color={theme.colors.primary}
+              style={{ animation: "spin 1s linear infinite" }}
+            />
+            <p style={{ marginTop: "12px", color: theme.colors.textSecondary }}>
+              Loading categories...
+            </p>
             <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
           </div>
         ) : filteredCategories.length === 0 ? (
           <div style={{ textAlign: "center", padding: "60px 20px" }}>
-            <FolderTree size={48} color={theme.colors.border} style={{ marginBottom: "16px" }} />
-            <h3 style={{ margin: "0 0 8px", color: theme.colors.text }}>No Categories</h3>
+            <FolderTree
+              size={48}
+              color={theme.colors.border}
+              style={{ marginBottom: "16px" }}
+            />
+            <h3 style={{ margin: "0 0 8px", color: theme.colors.text }}>
+              No Categories
+            </h3>
             <p style={{ margin: 0, color: theme.colors.textSecondary }}>
-              {searchQuery ? "No results match your search." : "Start by adding your first category."}
+              {searchQuery
+                ? "No results match your search."
+                : "Start by adding your first category."}
             </p>
           </div>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+          <div
+            style={{ display: "flex", flexDirection: "column", gap: "12px" }}
+          >
             {filteredCategories.map((category: any) => (
               <div
                 key={category.id}
@@ -658,10 +728,20 @@ export const Services = () => {
                     transition: "background 0.2s",
                   }}
                   onClick={() => toggleCategory(category.id)}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = theme.colors.surface)}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                  onMouseEnter={(e) =>
+                    (e.currentTarget.style.background = theme.colors.surface)
+                  }
+                  onMouseLeave={(e) =>
+                    (e.currentTarget.style.background = "transparent")
+                  }
                 >
-                  <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "16px",
+                    }}
+                  >
                     <div
                       style={{
                         width: "44px",
@@ -674,20 +754,45 @@ export const Services = () => {
                         fontSize: "20px",
                       }}
                     >
-                      {category.icon || <Layers size={22} color={theme.colors.primary} />}
+                      {(() => {
+                        const Icon =
+                          category.icon && iconMap[category.icon]
+                            ? iconMap[category.icon]
+                            : Layers;
+
+                        return <Icon size={22} color={theme.colors.primary} />;
+                      })()}
                     </div>
                     <div>
-                      <div style={{ fontWeight: "700", color: theme.colors.text, fontSize: "15px" }}>
+                      <div
+                        style={{
+                          fontWeight: "700",
+                          color: theme.colors.text,
+                          fontSize: "15px",
+                        }}
+                      >
                         {category.name}
                       </div>
-                      <div style={{ fontSize: "13px", color: theme.colors.textSecondary, marginTop: "2px" }}>
+                      <div
+                        style={{
+                          fontSize: "13px",
+                          color: theme.colors.textSecondary,
+                          marginTop: "2px",
+                        }}
+                      >
                         {category.subcategories?.length || 0} sub-categories
                         {category.description && ` - ${category.description}`}
                       </div>
                     </div>
                   </div>
 
-                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                    }}
+                  >
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -731,7 +836,11 @@ export const Services = () => {
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        setDeleteTarget({ type: "category", id: category.id, name: category.name });
+                        setDeleteTarget({
+                          type: "category",
+                          id: category.id,
+                          name: category.name,
+                        });
                         setShowDeleteModal(true);
                       }}
                       style={{
@@ -747,82 +856,115 @@ export const Services = () => {
                     {expandedCategories.has(category.id) ? (
                       <ChevronUp size={20} color={theme.colors.textSecondary} />
                     ) : (
-                      <ChevronDown size={20} color={theme.colors.textSecondary} />
+                      <ChevronDown
+                        size={20}
+                        color={theme.colors.textSecondary}
+                      />
                     )}
                   </div>
                 </div>
 
                 {/* Subcategories */}
-                {expandedCategories.has(category.id) && category.subcategories && category.subcategories.length > 0 && (
-                  <div
-                    style={{
-                      borderTop: `1px solid ${theme.colors.border}`,
-                      background: theme.colors.surface,
-                    }}
-                  >
-                    {category.subcategories.map((sub: any, index: number) => (
-                      <div
-                        key={sub.id}
-                        style={{
-                          padding: "12px 20px 12px 80px",
-                          display: "flex",
-                          alignItems: "center",
-                          justifyContent: "space-between",
-                          borderBottom:
-                            index < category.subcategories.length - 1 ? `1px solid ${theme.colors.border}` : "none",
-                        }}
-                      >
-                        <div>
-                          <div style={{ fontWeight: "600", color: theme.colors.text, fontSize: "14px" }}>
-                            {sub.name}
-                          </div>
-                          {sub.description && (
-                            <div style={{ fontSize: "12px", color: theme.colors.textSecondary, marginTop: "2px" }}>
-                              {sub.description}
+                {expandedCategories.has(category.id) &&
+                  category.subcategories &&
+                  category.subcategories.length > 0 && (
+                    <div
+                      style={{
+                        borderTop: `1px solid ${theme.colors.border}`,
+                        background: theme.colors.surface,
+                      }}
+                    >
+                      {category.subcategories.map((sub: any, index: number) => (
+                        <div
+                          key={sub.id}
+                          style={{
+                            padding: "12px 20px 12px 80px",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "space-between",
+                            borderBottom:
+                              index < category.subcategories.length - 1
+                                ? `1px solid ${theme.colors.border}`
+                                : "none",
+                          }}
+                        >
+                          <div>
+                            <div
+                              style={{
+                                fontWeight: "600",
+                                color: theme.colors.text,
+                                fontSize: "14px",
+                              }}
+                            >
+                              {sub.name}
                             </div>
-                          )}
-                        </div>
-                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                          <button
-                            onClick={() => {
-                              setParentCategoryId(category.id);
-                              setSelectedSubcategory(sub);
-                              setShowSubcategoryModal(true);
-                            }}
+                            {sub.description && (
+                              <div
+                                style={{
+                                  fontSize: "12px",
+                                  color: theme.colors.textSecondary,
+                                  marginTop: "2px",
+                                }}
+                              >
+                                {sub.description}
+                              </div>
+                            )}
+                          </div>
+                          <div
                             style={{
-                              padding: "6px",
-                              background: "transparent",
-                              border: `1px solid ${theme.colors.border}`,
-                              borderRadius: "4px",
-                              cursor: "pointer",
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "6px",
                             }}
                           >
-                            <Edit size={14} color={theme.colors.textSecondary} />
-                          </button>
-                          <button
-                            onClick={() => {
-                              setDeleteTarget({ type: "subcategory", id: sub.id, name: sub.name });
-                              setShowDeleteModal(true);
-                            }}
-                            style={{
-                              padding: "6px",
-                              background: "transparent",
-                              border: `1px solid ${theme.colors.border}`,
-                              borderRadius: "4px",
-                              cursor: "pointer",
-                            }}
-                          >
-                            <Trash2 size={14} color={theme.colors.danger} />
-                          </button>
+                            <button
+                              onClick={() => {
+                                setParentCategoryId(category.id);
+                                setSelectedSubcategory(sub);
+                                setShowSubcategoryModal(true);
+                              }}
+                              style={{
+                                padding: "6px",
+                                background: "transparent",
+                                border: `1px solid ${theme.colors.border}`,
+                                borderRadius: "4px",
+                                cursor: "pointer",
+                              }}
+                            >
+                              <Edit
+                                size={14}
+                                color={theme.colors.textSecondary}
+                              />
+                            </button>
+                            <button
+                              onClick={() => {
+                                setDeleteTarget({
+                                  type: "subcategory",
+                                  id: sub.id,
+                                  name: sub.name,
+                                });
+                                setShowDeleteModal(true);
+                              }}
+                              style={{
+                                padding: "6px",
+                                background: "transparent",
+                                border: `1px solid ${theme.colors.border}`,
+                                borderRadius: "4px",
+                                cursor: "pointer",
+                              }}
+                            >
+                              <Trash2 size={14} color={theme.colors.danger} />
+                            </button>
+                          </div>
                         </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                      ))}
+                    </div>
+                  )}
 
                 {/* Empty subcategories message */}
                 {expandedCategories.has(category.id) &&
-                  (!category.subcategories || category.subcategories.length === 0) && (
+                  (!category.subcategories ||
+                    category.subcategories.length === 0) && (
                     <div
                       style={{
                         borderTop: `1px solid ${theme.colors.border}`,
@@ -831,7 +973,13 @@ export const Services = () => {
                         background: theme.colors.surface,
                       }}
                     >
-                      <p style={{ margin: 0, color: theme.colors.textSecondary, fontSize: "14px" }}>
+                      <p
+                        style={{
+                          margin: 0,
+                          color: theme.colors.textSecondary,
+                          fontSize: "14px",
+                        }}
+                      >
                         No sub-categories yet.{" "}
                         <button
                           onClick={() => {

@@ -132,7 +132,7 @@ const KycDetailModal = ({ kyc, onClose, onApprove, onReject, isLoading }: any) =
                 {kyc.full_name}
               </h3>
               <p style={{ margin: "4px 0 0", color: theme.colors.textSecondary, fontSize: "14px" }}>
-                User ID: {kyc.user_id}
+                User ID: {kyc.user_id?.$oid || kyc.user_id || "N/A"}
               </p>
             </div>
             {getStatusBadge(kyc.status)}
