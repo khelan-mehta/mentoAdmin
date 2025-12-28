@@ -1,24 +1,15 @@
 import { useState } from "react";
 
-import {
-  initialBookings,
-  initialCustomers,
-  initialServices,
-  initialWorkers,
-  theme,
-} from "./components/Constants";
+import { theme } from "./components/Constants";
 import { Eye, EyeOff, Lock, Mail } from "lucide-react";
-import logo from './assets/image.png';
+import logo from "./assets/image.png";
 import { Sidebar } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
-import { Dashboard } from "./components/Dashboard";
-import { FilterBar } from "./components/FilterBar";
-import { Bookings } from "./components/Bookings";
 import { Workers } from "./components/Workers";
-import { Customers } from "./components/Customers";
+import { JobProfiles } from "./components/JobProfiles";
+import { Jobs } from "./components/Jobs";
 import { Services } from "./components/Services";
 import { SettingsPage } from "./components/SettingsPage";
-import { Modal } from "./components/Modal";
 
 // ==================== LOGIN COMPONENT ====================
 const LoginPage = ({ onLogin }: any) => {
@@ -83,11 +74,7 @@ const LoginPage = ({ onLogin }: any) => {
           style={{ textAlign: "center" }}
           className="flex flex-col justify-center items-center"
         >
-          <img
-            src={logo}
-            alt="Logo"
-            className="w-48 self-center"
-          />
+          <img src={logo} alt="Logo" className="w-48 self-center" />
         </div>
 
         {/* Login Card */}
@@ -299,26 +286,10 @@ const AdminPanel = () => {
     return savedUser ? JSON.parse(savedUser) : null;
   });
 
-  const [activeTab, setActiveTab] = useState("dashboard");
+  const [activeTab, setActiveTab] = useState("workers");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
-  const [bookings, setBookings] = useState(initialBookings);
-  const [workers, setWorkers] = useState(initialWorkers);
-  const [customers, setCustomers] = useState(initialCustomers);
-  const [services] = useState<any>(initialServices);
   const [notifications, setNotifications] = useState(3);
-
-  // Filters
-  const [statusFilter, setStatusFilter] = useState("all");
-  const [categoryFilter, setCategoryFilter] = useState("all");
-  const [dateFilter, setDateFilter] = useState("all");
-  const [sortBy, setSortBy] = useState("date");
-  const [sortOrder, setSortOrder] = useState("desc");
-
-  // Modals
-  const [selectedItem, setSelectedItem] = useState(null);
-  const [showModal, setShowModal] = useState(false);
-  const [modalType, setModalType] = useState("");
 
   const handleLogin = (userData: any) => {
     setUser(userData);
@@ -326,116 +297,12 @@ const AdminPanel = () => {
   };
 
   const handleLogout = () => {
+    localStorage.removeItem("isAuthenticated");
+    localStorage.removeItem("user");
+    localStorage.removeItem("token");
     setUser(null);
     setIsAuthenticated(false);
-    setActiveTab("dashboard");
-  };
-
-  // Filtering logic
-  const filterData = (data: any, type: any) => {
-    let filtered = [...data];
-
-    if (searchQuery) {
-      filtered = filtered.filter((item) => {
-        const searchLower = searchQuery.toLowerCase();
-        if (type === "bookings") {
-          return (
-            item.customer.toLowerCase().includes(searchLower) ||
-            item.service.toLowerCase().includes(searchLower) ||
-            item.worker.toLowerCase().includes(searchLower)
-          );
-        } else if (type === "workers") {
-          return (
-            item.name.toLowerCase().includes(searchLower) ||
-            item.category.toLowerCase().includes(searchLower)
-          );
-        } else if (type === "customers") {
-          return (
-            item.name.toLowerCase().includes(searchLower) ||
-            item.email.toLowerCase().includes(searchLower)
-          );
-        } else if (type === "services") {
-          return (
-            item.name.toLowerCase().includes(searchLower) ||
-            item.category.toLowerCase().includes(searchLower)
-          );
-        }
-        return true;
-      });
-    }
-
-    if (statusFilter !== "all") {
-      filtered = filtered.filter((item) => item.status === statusFilter);
-    }
-
-    if (categoryFilter !== "all" && type === "workers") {
-      filtered = filtered.filter((item) => item.category === categoryFilter);
-    }
-
-    if (dateFilter !== "all" && type === "bookings") {
-      const today: any = new Date();
-      filtered = filtered.filter((item) => {
-        const itemDate: any = new Date(item.date);
-        const diffDays = Math.floor((today - itemDate) / (1000 * 60 * 60 * 24));
-
-        if (dateFilter === "today") return diffDays === 0;
-        if (dateFilter === "week") return diffDays <= 7;
-        if (dateFilter === "month") return diffDays <= 30;
-        return true;
-      });
-    }
-
-    filtered.sort((a, b) => {
-      let aVal, bVal;
-
-      if (sortBy === "date") {
-        aVal = new Date(a.date || a.joinDate);
-        bVal = new Date(b.date || b.joinDate);
-      } else if (
-        sortBy === "amount" ||
-        sortBy === "earnings" ||
-        sortBy === "totalSpent"
-      ) {
-        aVal = a[sortBy] || 0;
-        bVal = b[sortBy] || 0;
-      } else if (sortBy === "rating") {
-        aVal = a.rating || 0;
-        bVal = b.rating || 0;
-      } else {
-        aVal = a[sortBy] || "";
-        bVal = b[sortBy] || "";
-      }
-
-      if (sortOrder === "asc") {
-        return aVal > bVal ? 1 : -1;
-      } else {
-        return aVal < bVal ? 1 : -1;
-      }
-    });
-
-    return filtered;
-  };
-
-  const updateBookingStatus = (id: any, newStatus: any) => {
-    setBookings(
-      bookings.map((b) => (b.id === id ? { ...b, status: newStatus } : b))
-    );
-  };
-
-  const updateWorkerStatus = (id: any, newStatus: any) => {
-    setWorkers(
-      workers.map((w) => (w.id === id ? { ...w, status: newStatus } : w))
-    );
-  };
-
-  const deleteItem = (id: any, type: any) => {
-    if (type === "booking") {
-      setBookings(bookings.filter((b) => b.id !== id));
-    } else if (type === "worker") {
-      setWorkers(workers.filter((w) => w.id !== id));
-    } else if (type === "customer") {
-      setCustomers(customers.filter((c) => c.id !== id));
-    }
+    setActiveTab("workers");
   };
 
   // Show login page if not authenticated
@@ -478,118 +345,17 @@ const AdminPanel = () => {
         />
 
         <div style={{ flex: 1, overflowY: "auto" }}>
-          {activeTab === "dashboard" && (
-            <Dashboard
-              bookings={bookings}
-              workers={workers}
-              customers={customers}
-              setActiveTab={setActiveTab}
-            />
-          )}
+          {activeTab === "workers" && <Workers />}
 
-          {activeTab === "bookings" && (
-            <>
-              <div style={{ padding: "24px 24px 0" }}>
-                <FilterBar
-                  type="bookings"
-                  statusFilter={statusFilter}
-                  setStatusFilter={setStatusFilter}
-                  dateFilter={dateFilter}
-                  setDateFilter={setDateFilter}
-                  categoryFilter={categoryFilter}
-                  setCategoryFilter={setCategoryFilter}
-                  sortBy={sortBy}
-                  setSortBy={setSortBy}
-                  sortOrder={sortOrder}
-                  setSortOrder={setSortOrder}
-                  setSearchQuery={setSearchQuery}
-                />
-              </div>
-              <Bookings
-                bookings={bookings}
-                updateBookingStatus={updateBookingStatus}
-                deleteItem={deleteItem}
-                setSelectedItem={setSelectedItem}
-                setModalType={setModalType}
-                setShowModal={setShowModal}
-                filterData={filterData}
-              />
-            </>
-          )}
+          {activeTab === "jobProfiles" && <JobProfiles />}
 
-          {activeTab === "workers" && (
-            <>
-              <div style={{ padding: "24px 24px 0" }}>
-                <FilterBar
-                  type="workers"
-                  statusFilter={statusFilter}
-                  setStatusFilter={setStatusFilter}
-                  dateFilter={dateFilter}
-                  setDateFilter={setDateFilter}
-                  categoryFilter={categoryFilter}
-                  setCategoryFilter={setCategoryFilter}
-                  sortBy={sortBy}
-                  setSortBy={setSortBy}
-                  sortOrder={sortOrder}
-                  setSortOrder={setSortOrder}
-                  setSearchQuery={setSearchQuery}
-                />
-              </div>
-              <Workers
-                workers={workers}
-                updateWorkerStatus={updateWorkerStatus}
-                deleteItem={deleteItem}
-                setSelectedItem={setSelectedItem}
-                setModalType={setModalType}
-                setShowModal={setShowModal}
-                filterData={filterData}
-              />
-            </>
-          )}
+          {activeTab === "jobs" && <Jobs />}
 
-          {activeTab === "customers" && (
-            <>
-              <div style={{ padding: "24px 24px 0" }}>
-                <FilterBar
-                  type="customers"
-                  statusFilter={statusFilter}
-                  setStatusFilter={setStatusFilter}
-                  dateFilter={dateFilter}
-                  setDateFilter={setDateFilter}
-                  categoryFilter={categoryFilter}
-                  setCategoryFilter={setCategoryFilter}
-                  sortBy={sortBy}
-                  setSortBy={setSortBy}
-                  sortOrder={sortOrder}
-                  setSortOrder={setSortOrder}
-                  setSearchQuery={setSearchQuery}
-                />
-              </div>
-              <Customers
-                customers={customers}
-                deleteItem={deleteItem}
-                setSelectedItem={setSelectedItem}
-                setModalType={setModalType}
-                setShowModal={setShowModal}
-                filterData={filterData}
-              />
-            </>
-          )}
-
-          {activeTab === "services" && (
-            <Services services={services} filterData={filterData} />
-          )}
+          {activeTab === "services" && <Services />}
 
           {activeTab === "settings" && <SettingsPage />}
         </div>
       </div>
-
-      <Modal
-        showModal={showModal}
-        setShowModal={setShowModal}
-        selectedItem={selectedItem}
-        modalType={modalType}
-      />
     </div>
   );
 };

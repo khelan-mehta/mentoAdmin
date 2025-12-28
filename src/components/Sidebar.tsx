@@ -1,11 +1,12 @@
 import {
-  Home,
   Users,
   Briefcase,
   Settings,
   LogOut,
   Menu,
-  Calendar,
+  UserCheck,
+  FolderTree,
+  ClipboardList,
 } from "lucide-react";
 import logo from "../assets/image.png";
 // ==================== CONSTANTS ====================
@@ -34,11 +35,10 @@ export const Sidebar = ({
   setSidebarOpen,
 }: any) => {
   const menuItems = [
-    { id: "dashboard", label: "Dashboard", icon: Home },
-    { id: "bookings", label: "Bookings", icon: Calendar },
-    { id: "workers", label: "Workers", icon: Users },
-    { id: "customers", label: "Customers", icon: Users },
-    { id: "services", label: "Services", icon: Briefcase },
+    { id: "workers", label: "Workers", icon: UserCheck },
+    { id: "jobProfiles", label: "Job Profiles", icon: Users },
+    { id: "jobs", label: "Jobs", icon: ClipboardList },
+    { id: "services", label: "Services", icon: FolderTree },
     { id: "settings", label: "Settings", icon: Settings },
   ];
 
