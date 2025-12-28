@@ -1,12 +1,136 @@
-use rocket::serde::json::Json;
-use rocket::State;
-use rocket_okapi::openapi;
+use crate::db::DbConn;
+use crate::models::{CategoryResponse, MainCategory, SubCategory, SubCategoryResponse, WorkerProfile, JobSeekerProfile};
+use crate::utils::{ApiError, ApiResponse};
 use mongodb::bson::{doc, DateTime, oid::ObjectId};
 use mongodb::options::FindOptions;
-use crate::db::DbConn;
-use crate::models::{WorkerProfile, JobSeekerProfile, MainCategory, SubCategory};
-use crate::guards::AuthGuard;
-use crate::utils::{ApiResponse, ApiError};
+use rocket::State;
+use rocket::serde::json::Json;
+use rocket_okapi::openapi;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+
+// Internal struct to deserialize from MongoDB services collection
+#[derive(Debug, Serialize, Deserialize)]
+struct Service {
+    #[serde(rename = "_id")]
+    id: ObjectId,
+    #[serde(rename = "serviceId")]
+    service_id: String,
+    name: String,
+    #[serde(rename = "serviceCategory")]
+    service_category: String,
+    price: String,
+    rating: String,
+    description: String,
+    icon: String,
+    color: String,
+}
+
+#[openapi(tag = "Category")]
+#[get("/category/all")]
+pub async fn get_all_categories(
+    db: &State<DbConn>,
+) -> Result<Json<ApiResponse<Vec<CategoryResponse>>>, ApiError> {
+    // Fetch all services from the services collection
+    let mut cursor = db
+        .collection::<Service>("services")
+        .find(None, None)
+        .await
+        .map_err(|e| ApiError::internal_error(format!("Database error: {}", e)))?;
+
+    let mut services = Vec::new();
+    while cursor
+        .advance()
+        .await
+        .map_err(|e| ApiError::internal_error(format!("Cursor error: {}", e)))?
+    {
+        let service = cursor
+            .deserialize_current()
+            .map_err(|e| ApiError::internal_error(format!("Deserialization error: {}", e)))?;
+        services.push(service);
+    }
+
+    // Group services by category
+    let mut categories_map: HashMap<String, Vec<Service>> = HashMap::new();
+    
+    for service in services {
+        categories_map
+            .entry(service.service_category.clone())
+            .or_insert_with(Vec::new)
+            .push(service);
+    }
+
+    // Convert to response format
+    let mut categories: Vec<CategoryResponse> = categories_map
+        .into_iter()
+        .map(|(category_name, services)| {
+            let icon = services.first().map(|s| s.icon.clone());
+            
+            let subcategories: Vec<SubCategoryResponse> = services
+                .into_iter()
+                .map(|service| SubCategoryResponse {
+                    id: service.id.to_hex(),
+                    name: service.name,
+                    description: Some(service.description),
+                })
+                .collect();
+
+            CategoryResponse {
+                id: category_name.clone(),
+                name: category_name,
+                description: None,
+                icon,
+                subcategories,
+            }
+        })
+        .collect();
+
+    // Sort categories alphabetically
+    categories.sort_by(|a, b| a.name.cmp(&b.name));
+
+    Ok(Json(ApiResponse::success(categories)))
+}
+
+#[openapi(tag = "Category")]
+#[get("/category/<category_name>/subcategories")]
+pub async fn get_subcategories(
+    db: &State<DbConn>,
+    category_name: String,
+) -> Result<Json<ApiResponse<Vec<SubCategoryResponse>>>, ApiError> {
+    let mut cursor = db
+        .collection::<Service>("services")
+        .find(
+            doc! {
+                "serviceCategory": &category_name
+            },
+            None,
+        )
+        .await
+        .map_err(|e| ApiError::internal_error(format!("Database error: {}", e)))?;
+
+    let mut subcategories = Vec::new();
+    while cursor
+        .advance()
+        .await
+        .map_err(|e| ApiError::internal_error(format!("Cursor error: {}", e)))?
+    {
+        let service = cursor
+            .deserialize_current()
+            .map_err(|e| ApiError::internal_error(format!("Deserialization error: {}", e)))?;
+
+        subcategories.push(SubCategoryResponse {
+            id: service.id.to_hex(),
+            name: service.name,
+            description: Some(service.description),
+        });
+    }
+
+    if subcategories.is_empty() {
+        return Err(ApiError::not_found("Category not found"));
+    }
+
+    Ok(Json(ApiResponse::success(subcategories)))
+}
 
 // ==================== WORKER ADMIN ROUTES ====================
 
@@ -22,7 +146,6 @@ pub struct WorkerListQuery {
 #[get("/admin/workers?<query..>")]
 pub async fn get_all_workers(
     db: &State<DbConn>,
-    _auth: AuthGuard,
     query: WorkerListQuery,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
     let page = query.page.unwrap_or(1).max(1);
@@ -77,7 +200,6 @@ pub struct UpdateWorkerVerificationDto {
 #[put("/admin/workers/<worker_id>/verify", data = "<dto>")]
 pub async fn verify_worker(
     db: &State<DbConn>,
-    _auth: AuthGuard,
     worker_id: String,
     dto: Json<UpdateWorkerVerificationDto>,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
@@ -111,7 +233,6 @@ pub struct JobSeekerListQuery {
 #[get("/admin/job-seekers?<query..>")]
 pub async fn get_all_job_seekers(
     db: &State<DbConn>,
-    _auth: AuthGuard,
     query: JobSeekerListQuery,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
     let page = query.page.unwrap_or(1).max(1);
@@ -167,7 +288,6 @@ pub struct UpdateJobSeekerVerificationDto {
 #[put("/admin/job-seekers/<profile_id>/verify", data = "<dto>")]
 pub async fn verify_job_seeker(
     db: &State<DbConn>,
-    _auth: AuthGuard,
     profile_id: String,
     dto: Json<UpdateJobSeekerVerificationDto>,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
@@ -203,7 +323,6 @@ pub struct CreateCategoryDto {
 #[post("/admin/categories", data = "<dto>")]
 pub async fn create_category(
     db: &State<DbConn>,
-    _auth: AuthGuard,
     dto: Json<CreateCategoryDto>,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
     let category = MainCategory {
@@ -234,7 +353,6 @@ pub async fn create_category(
 #[put("/admin/categories/<category_id>", data = "<dto>")]
 pub async fn update_category(
     db: &State<DbConn>,
-    _auth: AuthGuard,
     category_id: String,
     dto: Json<CreateCategoryDto>,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
@@ -277,13 +395,11 @@ pub async fn update_category(
 #[delete("/admin/categories/<category_id>")]
 pub async fn delete_category(
     db: &State<DbConn>,
-    _auth: AuthGuard,
     category_id: String,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
     let object_id = ObjectId::parse_str(&category_id)
         .map_err(|_| ApiError::bad_request("Invalid category ID"))?;
 
-    // Delete subcategories first
     db.collection::<SubCategory>("sub_categories")
         .delete_many(doc! { "main_category_id": object_id }, None)
         .await
@@ -314,11 +430,40 @@ pub struct CreateSubcategoryDto {
 #[post("/admin/subcategories", data = "<dto>")]
 pub async fn create_subcategory(
     db: &State<DbConn>,
-    _auth: AuthGuard,
     dto: Json<CreateSubcategoryDto>,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
-    let main_category_id = ObjectId::parse_str(&dto.main_category_id)
-        .map_err(|_| ApiError::bad_request("Invalid main category ID"))?;
+    let main_category_id = if dto.main_category_id.len() == 24 {
+        ObjectId::parse_str(&dto.main_category_id)
+            .map_err(|_| ApiError::bad_request("Invalid main category ID"))?
+    } else {
+        let category_cursor = db.collection::<MainCategory>("main_categories")
+            .find_one(doc! { "name": &dto.main_category_id }, None)
+            .await
+            .map_err(|e| ApiError::internal_error(format!("Database error: {}", e)))?;
+
+        if let Some(category) = category_cursor {
+            category.id.ok_or_else(|| ApiError::bad_request("Category missing ID"))?
+        } else {
+            let new_category = MainCategory {
+                id: None,
+                name: dto.main_category_id.clone(),
+                description: None,
+                icon: None,
+                is_active: true,
+                order: 0,
+                created_at: DateTime::now(),
+                updated_at: DateTime::now(),
+            };
+
+            let result = db.collection::<MainCategory>("main_categories")
+                .insert_one(&new_category, None)
+                .await
+                .map_err(|e| ApiError::internal_error(format!("Failed to create category: {}", e)))?;
+
+            result.inserted_id.as_object_id()
+                .ok_or_else(|| ApiError::internal_error("Failed to get inserted category ID"))?
+        }
+    };
 
     let subcategory = SubCategory {
         id: None,
@@ -348,7 +493,6 @@ pub async fn create_subcategory(
 #[put("/admin/subcategories/<subcategory_id>", data = "<dto>")]
 pub async fn update_subcategory(
     db: &State<DbConn>,
-    _auth: AuthGuard,
     subcategory_id: String,
     dto: Json<CreateSubcategoryDto>,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
@@ -388,7 +532,6 @@ pub async fn update_subcategory(
 #[delete("/admin/subcategories/<subcategory_id>")]
 pub async fn delete_subcategory(
     db: &State<DbConn>,
-    _auth: AuthGuard,
     subcategory_id: String,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
     let object_id = ObjectId::parse_str(&subcategory_id)
@@ -438,7 +581,6 @@ pub struct JobListQuery {
 #[get("/admin/jobs?<query..>")]
 pub async fn get_all_jobs(
     db: &State<DbConn>,
-    _auth: AuthGuard,
     query: JobListQuery,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
     let page = query.page.unwrap_or(1).max(1);
@@ -494,7 +636,6 @@ pub struct UpdateJobStatusDto {
 #[put("/admin/jobs/<job_id>/status", data = "<dto>")]
 pub async fn update_job_status(
     db: &State<DbConn>,
-    _auth: AuthGuard,
     job_id: String,
     dto: Json<UpdateJobStatusDto>,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
@@ -528,7 +669,6 @@ pub async fn update_job_status(
 #[delete("/admin/jobs/<job_id>")]
 pub async fn delete_job(
     db: &State<DbConn>,
-    _auth: AuthGuard,
     job_id: String,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
     let object_id = ObjectId::parse_str(&job_id)
