@@ -37,7 +37,8 @@ const theme = {
   },
 };
 
-const API_BASE_URL = "http://localhost:8000/api/v1";
+import { BASE_URL } from "./Constants";
+const API_BASE_URL = BASE_URL;
 
 // ==================== KYC DETAIL MODAL ====================
 const KycDetailModal = ({ kyc, onClose, onApprove, onReject, isLoading }: any) => {

@@ -37,7 +37,8 @@ const theme = {
   },
 };
 
-const API_BASE_URL = "http://localhost:8000/api/v1";
+import { BASE_URL } from "./Constants";
+const API_BASE_URL = BASE_URL;
 
 // ==================== JOB DETAIL MODAL ====================
 const JobDetailModal = ({ job, onClose, onApprove, onReject, onDelete, isLoading }: any) => {

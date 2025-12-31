@@ -14,6 +14,8 @@ import {
   Layers,
 } from "lucide-react";
 import { iconMap } from "./iconMap";
+import { BASE_URL } from "./Constants";
+const API_BASE_URL = BASE_URL;
 
 // ==================== CONSTANTS ====================
 const theme = {
@@ -32,7 +34,6 @@ const theme = {
   },
 };
 
-const API_BASE_URL = "http://localhost:8000/api/v1";
 
 // ==================== ADD/EDIT MODAL ====================
 const CategoryModal = ({

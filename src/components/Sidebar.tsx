@@ -26,7 +26,6 @@ const theme = {
   },
 };
 
-
 export const Sidebar = ({
   onLogout,
   activeTab,
@@ -39,7 +38,6 @@ export const Sidebar = ({
     { id: "jobProfiles", label: "Job Profiles", icon: Users },
     { id: "jobs", label: "Jobs", icon: ClipboardList },
     { id: "services", label: "Services", icon: FolderTree },
-    { id: "settings", label: "Settings", icon: Settings },
   ];
 
   return (

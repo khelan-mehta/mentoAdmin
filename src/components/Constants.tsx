@@ -307,3 +307,5 @@ export const initialServices = [
   },
 ];
 
+export const BASE_URL = "https://api.mentoservices.com/api/v1";
+
