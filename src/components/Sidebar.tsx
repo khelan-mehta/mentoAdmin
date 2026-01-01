@@ -7,6 +7,7 @@ import {
   UserCheck,
   FolderTree,
   ClipboardList,
+  CreditCard,
 } from "lucide-react";
 import logo from "../assets/image.png";
 // ==================== CONSTANTS ====================
@@ -37,6 +38,7 @@ export const Sidebar = ({
     { id: "workers", label: "Workers", icon: UserCheck },
     { id: "jobProfiles", label: "Job Profiles", icon: Users },
     { id: "jobs", label: "Jobs", icon: ClipboardList },
+    { id: "subscriptions", label: "Subscriptions", icon: CreditCard },
     { id: "services", label: "Services", icon: FolderTree },
   ];
 

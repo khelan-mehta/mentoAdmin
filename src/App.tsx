@@ -8,6 +8,7 @@ import { TopBar } from "./components/TopBar";
 import { Workers } from "./components/Workers";
 import { JobProfiles } from "./components/JobProfiles";
 import { Jobs } from "./components/Jobs";
+import { Subscriptions } from "./components/Subscriptions";
 import { Services } from "./components/Services";
 import { SettingsPage } from "./components/SettingsPage";
 
@@ -350,6 +351,8 @@ const AdminPanel = () => {
           {activeTab === "jobProfiles" && <JobProfiles />}
 
           {activeTab === "jobs" && <Jobs />}
+
+          {activeTab === "subscriptions" && <Subscriptions />}
 
           {activeTab === "services" && <Services />}
 
