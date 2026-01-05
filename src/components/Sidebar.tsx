@@ -8,6 +8,8 @@ import {
   FolderTree,
   ClipboardList,
   CreditCard,
+  ShieldCheck,
+  UserCog,
 } from "lucide-react";
 import logo from "../assets/image.png";
 // ==================== CONSTANTS ====================
@@ -35,8 +37,10 @@ export const Sidebar = ({
   setSidebarOpen,
 }: any) => {
   const menuItems = [
-    { id: "workers", label: "Workers", icon: UserCheck },
-    { id: "jobProfiles", label: "Job Profiles", icon: Users },
+    { id: "users", label: "Users", icon: Users },
+    { id: "kyc", label: "KYC", icon: ShieldCheck },
+    { id: "workerProfiles", label: "Worker Profiles", icon: UserCog },
+    { id: "jobProfiles", label: "Job Profiles", icon: Briefcase },
     { id: "jobs", label: "Jobs", icon: ClipboardList },
     { id: "subscriptions", label: "Subscriptions", icon: CreditCard },
     { id: "services", label: "Services", icon: FolderTree },

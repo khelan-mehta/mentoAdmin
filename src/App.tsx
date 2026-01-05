@@ -5,7 +5,9 @@ import { Eye, EyeOff, Lock, Mail } from "lucide-react";
 import logo from "./assets/image.png";
 import { Sidebar } from "./components/Sidebar";
 import { TopBar } from "./components/TopBar";
-import { Workers } from "./components/Workers";
+import { Users } from "./components/Users";
+import { KYC } from "./components/KYC";
+import { WorkerProfiles } from "./components/WorkerProfiles";
 import { JobProfiles } from "./components/JobProfiles";
 import { Jobs } from "./components/Jobs";
 import { Subscriptions } from "./components/Subscriptions";
@@ -287,7 +289,7 @@ const AdminPanel = () => {
     return savedUser ? JSON.parse(savedUser) : null;
   });
 
-  const [activeTab, setActiveTab] = useState("workers");
+  const [activeTab, setActiveTab] = useState("users");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [notifications, setNotifications] = useState(3);
@@ -303,7 +305,7 @@ const AdminPanel = () => {
     localStorage.removeItem("token");
     setUser(null);
     setIsAuthenticated(false);
-    setActiveTab("workers");
+    setActiveTab("users");
   };
 
   // Show login page if not authenticated
@@ -346,7 +348,11 @@ const AdminPanel = () => {
         />
 
         <div style={{ flex: 1, overflowY: "auto" }}>
-          {activeTab === "workers" && <Workers />}
+          {activeTab === "users" && <Users />}
+
+          {activeTab === "kyc" && <KYC />}
+
+          {activeTab === "workerProfiles" && <WorkerProfiles />}
 
           {activeTab === "jobProfiles" && <JobProfiles />}
 

@@ -366,8 +366,8 @@ const KycDetailModal = ({ kyc, onClose, onApprove, onReject, isLoading }: any) =
   );
 };
 
-// ==================== WORKERS COMPONENT ====================
-export const Workers = () => {
+// ==================== KYC COMPONENT ====================
+export const KYC = () => {
   const [workers, setWorkers] = useState<any[]>([]);
   const [kycSubmissions, setKycSubmissions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);

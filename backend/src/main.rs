@@ -176,6 +176,15 @@ fn rocket() -> Rocket<Build> {
                 routes::admin::get_all_jobs,
                 routes::admin::update_job_status,
                 routes::admin::delete_job,
+                // Admin Routes - Users
+                routes::admin::get_all_users,
+                routes::admin::get_user_by_id,
+                routes::admin::update_user,
+                routes::admin::delete_user,
+                // Admin Routes - Worker Profiles
+                routes::admin::get_worker_by_id,
+                routes::admin::update_worker,
+                routes::admin::delete_worker,
             ],
         )
         .mount("/uploads", FileServer::from("uploads"))

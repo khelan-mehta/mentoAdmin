@@ -1,5 +1,5 @@
 use crate::db::DbConn;
-use crate::models::{CategoryResponse, MainCategory, SubCategory, SubCategoryResponse, WorkerProfile, JobSeekerProfile};
+use crate::models::{CategoryResponse, MainCategory, SubCategory, SubCategoryResponse, WorkerProfile, JobSeekerProfile, User};
 use crate::utils::{ApiError, ApiResponse};
 use mongodb::bson::{doc, DateTime, oid::ObjectId};
 use mongodb::options::FindOptions;
@@ -687,5 +687,280 @@ pub async fn delete_job(
 
     Ok(Json(ApiResponse::success(serde_json::json!({
         "message": "Job deleted successfully"
+    }))))
+}
+
+// ==================== USER ADMIN ROUTES ====================
+
+#[derive(FromForm, serde::Deserialize, rocket_okapi::okapi::schemars::JsonSchema)]
+pub struct UserListQuery {
+    pub is_active: Option<bool>,
+    pub page: Option<i64>,
+    pub limit: Option<i64>,
+    pub search: Option<String>,
+}
+
+#[openapi(tag = "Admin - Users")]
+#[get("/admin/users?<query..>")]
+pub async fn get_all_users(
+    db: &State<DbConn>,
+    query: UserListQuery,
+) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
+    let page = query.page.unwrap_or(1).max(1);
+    let limit = query.limit.unwrap_or(20).min(100);
+    let skip = (page - 1) * limit;
+
+    let mut filter = doc! {};
+
+    if let Some(is_active) = query.is_active {
+        filter.insert("is_active", is_active);
+    }
+
+    if let Some(ref search_term) = query.search {
+        if !search_term.is_empty() {
+            filter.insert("$or", vec![
+                doc! { "name": { "$regex": search_term, "$options": "i" } },
+                doc! { "mobile": { "$regex": search_term, "$options": "i" } },
+                doc! { "email": { "$regex": search_term, "$options": "i" } },
+            ]);
+        }
+    }
+
+    let find_options = FindOptions::builder()
+        .skip(skip as u64)
+        .limit(limit)
+        .sort(doc! { "created_at": -1 })
+        .build();
+
+    let mut cursor = db.collection::<User>("users")
+        .find(filter.clone(), find_options)
+        .await
+        .map_err(|e| ApiError::internal_error(format!("Database error: {}", e)))?;
+
+    let mut users = Vec::new();
+    while cursor.advance().await.map_err(|e| ApiError::internal_error(format!("Cursor error: {}", e)))? {
+        let user = cursor.deserialize_current()
+            .map_err(|e| ApiError::internal_error(format!("Deserialization error: {}", e)))?;
+        users.push(user);
+    }
+
+    let total = db.collection::<User>("users")
+        .count_documents(filter, None)
+        .await
+        .map_err(|e| ApiError::internal_error(format!("Count error: {}", e)))?;
+
+    Ok(Json(ApiResponse::success(serde_json::json!({
+        "users": users,
+        "pagination": {
+            "page": page,
+            "limit": limit,
+            "total": total,
+            "pages": (total as f64 / limit as f64).ceil() as i64,
+        }
+    }))))
+}
+
+#[openapi(tag = "Admin - Users")]
+#[get("/admin/users/<user_id>")]
+pub async fn get_user_by_id(
+    db: &State<DbConn>,
+    user_id: String,
+) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
+    let object_id = ObjectId::parse_str(&user_id)
+        .map_err(|_| ApiError::bad_request("Invalid user ID"))?;
+
+    let user = db.collection::<User>("users")
+        .find_one(doc! { "_id": object_id }, None)
+        .await
+        .map_err(|e| ApiError::internal_error(format!("Database error: {}", e)))?
+        .ok_or_else(|| ApiError::not_found("User not found"))?;
+
+    Ok(Json(ApiResponse::success(serde_json::to_value(&user)
+        .map_err(|e| ApiError::internal_error(format!("Serialization error: {}", e)))?)))
+}
+
+#[derive(serde::Deserialize, rocket_okapi::okapi::schemars::JsonSchema)]
+pub struct UpdateUserDto {
+    pub name: Option<String>,
+    pub email: Option<String>,
+    pub city: Option<String>,
+    pub pincode: Option<String>,
+    pub is_active: Option<bool>,
+}
+
+#[openapi(tag = "Admin - Users")]
+#[put("/admin/users/<user_id>", data = "<dto>")]
+pub async fn update_user(
+    db: &State<DbConn>,
+    user_id: String,
+    dto: Json<UpdateUserDto>,
+) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
+    let object_id = ObjectId::parse_str(&user_id)
+        .map_err(|_| ApiError::bad_request("Invalid user ID"))?;
+
+    let mut update_doc = doc! {
+        "updated_at": DateTime::now(),
+    };
+
+    if let Some(ref name) = dto.name {
+        update_doc.insert("name", name);
+    }
+    if let Some(ref email) = dto.email {
+        update_doc.insert("email", email);
+    }
+    if let Some(ref city) = dto.city {
+        update_doc.insert("city", city);
+    }
+    if let Some(ref pincode) = dto.pincode {
+        update_doc.insert("pincode", pincode);
+    }
+    if let Some(is_active) = dto.is_active {
+        update_doc.insert("is_active", is_active);
+    }
+
+    db.collection::<User>("users")
+        .update_one(
+            doc! { "_id": object_id },
+            doc! { "$set": update_doc },
+            None
+        )
+        .await
+        .map_err(|e| ApiError::internal_error(format!("Failed to update user: {}", e)))?;
+
+    Ok(Json(ApiResponse::success(serde_json::json!({
+        "message": "User updated successfully"
+    }))))
+}
+
+#[openapi(tag = "Admin - Users")]
+#[delete("/admin/users/<user_id>")]
+pub async fn delete_user(
+    db: &State<DbConn>,
+    user_id: String,
+) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
+    let object_id = ObjectId::parse_str(&user_id)
+        .map_err(|_| ApiError::bad_request("Invalid user ID"))?;
+
+    // Soft delete - set is_active to false
+    db.collection::<User>("users")
+        .update_one(
+            doc! { "_id": object_id },
+            doc! { "$set": { "is_active": false, "updated_at": DateTime::now() } },
+            None
+        )
+        .await
+        .map_err(|e| ApiError::internal_error(format!("Failed to delete user: {}", e)))?;
+
+    Ok(Json(ApiResponse::success(serde_json::json!({
+        "message": "User deleted successfully"
+    }))))
+}
+
+// ==================== WORKER PROFILE ADMIN ROUTES ====================
+
+#[openapi(tag = "Admin - Workers")]
+#[get("/admin/workers/<worker_id>")]
+pub async fn get_worker_by_id(
+    db: &State<DbConn>,
+    worker_id: String,
+) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
+    let object_id = ObjectId::parse_str(&worker_id)
+        .map_err(|_| ApiError::bad_request("Invalid worker ID"))?;
+
+    let worker = db.collection::<WorkerProfile>("worker_profiles")
+        .find_one(doc! { "_id": object_id }, None)
+        .await
+        .map_err(|e| ApiError::internal_error(format!("Database error: {}", e)))?
+        .ok_or_else(|| ApiError::not_found("Worker profile not found"))?;
+
+    Ok(Json(ApiResponse::success(serde_json::to_value(&worker)
+        .map_err(|e| ApiError::internal_error(format!("Serialization error: {}", e)))?)))
+}
+
+#[derive(serde::Deserialize, rocket_okapi::okapi::schemars::JsonSchema)]
+pub struct UpdateWorkerDto {
+    pub categories: Option<Vec<String>>,
+    pub subcategories: Option<Vec<String>>,
+    pub experience_years: Option<i32>,
+    pub description: Option<String>,
+    pub hourly_rate: Option<f64>,
+    pub license_number: Option<String>,
+    pub service_areas: Option<Vec<String>>,
+    pub is_verified: Option<bool>,
+    pub is_available: Option<bool>,
+}
+
+#[openapi(tag = "Admin - Workers")]
+#[put("/admin/workers/<worker_id>", data = "<dto>")]
+pub async fn update_worker(
+    db: &State<DbConn>,
+    worker_id: String,
+    dto: Json<UpdateWorkerDto>,
+) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
+    let object_id = ObjectId::parse_str(&worker_id)
+        .map_err(|_| ApiError::bad_request("Invalid worker ID"))?;
+
+    let mut update_doc = doc! {
+        "updated_at": DateTime::now(),
+    };
+
+    if let Some(ref categories) = dto.categories {
+        update_doc.insert("categories", categories);
+    }
+    if let Some(ref subcategories) = dto.subcategories {
+        update_doc.insert("subcategories", subcategories);
+    }
+    if let Some(experience_years) = dto.experience_years {
+        update_doc.insert("experience_years", experience_years);
+    }
+    if let Some(ref description) = dto.description {
+        update_doc.insert("description", description);
+    }
+    if let Some(hourly_rate) = dto.hourly_rate {
+        update_doc.insert("hourly_rate", hourly_rate);
+    }
+    if let Some(ref license_number) = dto.license_number {
+        update_doc.insert("license_number", license_number);
+    }
+    if let Some(ref service_areas) = dto.service_areas {
+        update_doc.insert("service_areas", service_areas);
+    }
+    if let Some(is_verified) = dto.is_verified {
+        update_doc.insert("is_verified", is_verified);
+    }
+    if let Some(is_available) = dto.is_available {
+        update_doc.insert("is_available", is_available);
+    }
+
+    db.collection::<WorkerProfile>("worker_profiles")
+        .update_one(
+            doc! { "_id": object_id },
+            doc! { "$set": update_doc },
+            None
+        )
+        .await
+        .map_err(|e| ApiError::internal_error(format!("Failed to update worker: {}", e)))?;
+
+    Ok(Json(ApiResponse::success(serde_json::json!({
+        "message": "Worker profile updated successfully"
+    }))))
+}
+
+#[openapi(tag = "Admin - Workers")]
+#[delete("/admin/workers/<worker_id>")]
+pub async fn delete_worker(
+    db: &State<DbConn>,
+    worker_id: String,
+) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
+    let object_id = ObjectId::parse_str(&worker_id)
+        .map_err(|_| ApiError::bad_request("Invalid worker ID"))?;
+
+    db.collection::<WorkerProfile>("worker_profiles")
+        .delete_one(doc! { "_id": object_id }, None)
+        .await
+        .map_err(|e| ApiError::internal_error(format!("Failed to delete worker: {}", e)))?;
+
+    Ok(Json(ApiResponse::success(serde_json::json!({
+        "message": "Worker profile deleted successfully"
     }))))
 }
