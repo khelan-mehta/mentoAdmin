@@ -1,13 +1,13 @@
 use rocket::serde::json::Json;
 use rocket::State;
 use rocket::fs::TempFile;
+use std::path::Path;
 use rocket_okapi::openapi;
 use mongodb::bson::{doc, DateTime};
 use crate::db::DbConn;
-use crate::models::{User, UpdateProfileDto, UserResponse, Subscription, WorkerProfile};
+use crate::models::{JobSeekerProfile, Subscription, UpdateProfileDto, User, UserResponse, WorkerProfile};
 use crate::guards::AuthGuard;
 use crate::utils::{ApiResponse, ApiError, validate_email, validate_pincode};
-use std::path::Path;
 use tokio::fs;
 
 #[derive(serde::Deserialize, rocket_okapi::okapi::schemars::JsonSchema)]
@@ -22,54 +22,106 @@ pub async fn get_profile(
     db: &State<DbConn>,
     auth: AuthGuard,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
-    let user = db.collection::<User>("users")
+    /* ------------------ USER ------------------ */
+    let user = db
+        .collection::<User>("users")
         .find_one(doc! { "_id": auth.user_id }, None)
         .await
-        .map_err(|e| ApiError::internal_error(format!("Database error: {}", e)))?
+        .map_err(|e| ApiError::internal_error(e.to_string()))?
         .ok_or_else(|| ApiError::not_found("User not found"))?;
-    
-    // Check for active subscription
-    let subscription = db.collection::<Subscription>("subscriptions")
-        .find_one(
-            doc! { 
-                "user_id": auth.user_id,
-                "status": "active"
-            },
-            None
-        )
-        .await
-        .map_err(|e| ApiError::internal_error(format!("Database error: {}", e)))?;
-    
-    // Check for worker profile
-    let worker_profile = db.collection::<WorkerProfile>("worker_profiles")
+
+    let user_response: UserResponse = user.clone().into();
+
+    let mut response_data = serde_json::to_value(&user_response)
+        .map_err(|e| ApiError::internal_error(e.to_string()))?;
+
+    /* ------------------ WORKER PROFILE ------------------ */
+    let worker_profile = db
+        .collection::<WorkerProfile>("worker_profiles")
         .find_one(doc! { "user_id": auth.user_id }, None)
         .await
-        .map_err(|e| ApiError::internal_error(format!("Database error: {}", e)))?;
-    
-    let user_response: UserResponse = user.into();
-    
-    // Build response with subscription and worker profile info
-    let mut response_data = serde_json::to_value(&user_response)
-        .map_err(|e| ApiError::internal_error(format!("Serialization error: {}", e)))?;
-    
-    if let Some(sub) = subscription {
-        response_data["subscription_id"] = serde_json::json!(sub.id.map(|id| id.to_hex()));
-        response_data["subscription_plan"] = serde_json::json!(sub.plan_name);
-        response_data["subscription_expires_at"] = serde_json::json!(sub.expires_at);
-    } else {
-        response_data["subscription_id"] = serde_json::Value::Null;
-        response_data["subscription_plan"] = serde_json::Value::Null;
-        response_data["subscription_expires_at"] = serde_json::Value::Null;
-    }
-    
+        .map_err(|e| ApiError::internal_error(e.to_string()))?;
+
     if let Some(worker) = worker_profile {
-        response_data["worker_profile_id"] = serde_json::json!(worker.id.map(|id| id.to_hex()));
-        response_data["worker_is_verified"] = serde_json::json!(worker.is_verified);
+        response_data["worker_profile_id"] =
+            serde_json::json!(worker.id.map(|id| id.to_hex()));
+        response_data["worker_is_verified"] =
+            serde_json::json!(worker.is_verified);
     } else {
         response_data["worker_profile_id"] = serde_json::Value::Null;
         response_data["worker_is_verified"] = serde_json::Value::Null;
     }
-    
+
+    /* ------------------ WORKER SUBSCRIPTION (FLAT FIELDS ON USER) ------------------ */
+    response_data["subscription_id"] = match user.subscription_id {
+        Some(ref id) => serde_json::json!(id.to_hex()),
+        None => serde_json::Value::Null,
+    };
+
+    response_data["subscription_plan"] = match user.subscription_plan {
+        Some(ref plan) => serde_json::json!(plan),
+        None => serde_json::Value::Null,
+    };
+
+    response_data["subscription_expires_at"] = match user.subscription_expires_at {
+        Some(date) => serde_json::json!(date),
+        None => serde_json::Value::Null,
+    };
+
+    /* ------------------ JOB SEEKER PROFILE ------------------ */
+    let job_seeker_profile = db
+        .collection::<JobSeekerProfile>("job_seeker_profiles")
+        .find_one(doc! { "user_id": auth.user_id }, None)
+        .await
+        .map_err(|e| ApiError::internal_error(e.to_string()))?;
+
+    if let Some(profile) = job_seeker_profile {
+        response_data["job_seeker_profile_id"] =
+            serde_json::json!(profile.id.map(|id| id.to_hex()));
+        response_data["job_seeker_is_verified"] =
+            serde_json::json!(profile.is_verified);
+
+        let full_name = profile.full_name.clone();
+        response_data["job_seeker_full_name"] =
+            serde_json::json!(full_name.clone());
+
+        // Prefer job-seeker name if main name is empty
+        if response_data["name"].is_null() {
+            response_data["name"] = serde_json::json!(full_name);
+        }
+    } else {
+        response_data["job_seeker_profile_id"] = serde_json::Value::Null;
+        response_data["job_seeker_is_verified"] = serde_json::Value::Null;
+        response_data["job_seeker_full_name"] = serde_json::Value::Null;
+    }
+
+    /* ------------------ JOB SEEKER SUBSCRIPTION ------------------ */
+    let job_seeker_subscription = db
+        .collection::<Subscription>("subscriptions")
+        .find_one(
+            doc! {
+                "user_id": auth.user_id,
+                "subscription_type": "jobseeker",
+                "status": "active"
+            },
+            None,
+        )
+        .await
+        .map_err(|e| ApiError::internal_error(e.to_string()))?;
+
+    if let Some(sub) = job_seeker_subscription {
+        response_data["job_seeker_subscription_id"] =
+            serde_json::json!(sub.id.map(|id| id.to_hex()));
+        response_data["job_seeker_subscription_plan"] =
+            serde_json::json!(sub.plan_name);
+        response_data["job_seeker_subscription_expires_at"] =
+            serde_json::json!(sub.expires_at);
+    } else {
+        response_data["job_seeker_subscription_id"] = serde_json::Value::Null;
+        response_data["job_seeker_subscription_plan"] = serde_json::Value::Null;
+        response_data["job_seeker_subscription_expires_at"] = serde_json::Value::Null;
+    }
+
     Ok(Json(ApiResponse::success(response_data)))
 }
 
@@ -170,31 +222,41 @@ pub async fn upload_profile_photo(
     mut file: TempFile<'_>,
     auth: AuthGuard,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
-    // Create uploads directory if it doesn't exist
+    let content_type = file
+        .content_type()
+        .ok_or_else(|| ApiError::bad_request("Missing content type"))?;
+
+    // Rocket-safe image validation
+    if content_type.top() != "image" {
+        return Err(ApiError::bad_request("Only image files are allowed"));
+    }
+
     let upload_dir = "uploads/profiles";
-    fs::create_dir_all(upload_dir)
+    tokio::fs::create_dir_all(upload_dir)
         .await
-        .map_err(|e| ApiError::internal_error(format!("Failed to create directory: {}", e)))?;
-    
-    // Generate unique filename
-    let extension = file.content_type()
-        .and_then(|ct| ct.extension())
+        .map_err(|e| ApiError::internal_error(e.to_string()))?;
+
+    let extension = content_type
+        .extension()
         .map(|e| e.as_str())
         .unwrap_or("jpg");
-    
-    let filename = format!("{}_{}.{}", auth.user_id.to_hex(), chrono::Utc::now().timestamp(), extension);
+
+    let filename = format!(
+        "{}_{}.{}",
+        auth.user_id.to_hex(),
+        chrono::Utc::now().timestamp_millis(),
+        extension
+    );
+
     let filepath = format!("{}/{}", upload_dir, filename);
-    
-    // Save file
+
     file.persist_to(&filepath)
         .await
-        .map_err(|e| ApiError::internal_error(format!("Failed to save file: {}", e)))?;
-    
-    let file_url = format!("/{}", filepath);
-    
+        .map_err(|e| ApiError::internal_error(e.to_string()))?;
+
     Ok(Json(ApiResponse::success(serde_json::json!({
-        "url": file_url,
-        "message": "Photo uploaded successfully"
+        "url": format!("/uploads/profiles/{}", filename),
+        "message": "Profile photo uploaded successfully"
     }))))
 }
 

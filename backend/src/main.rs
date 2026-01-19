@@ -32,6 +32,9 @@ impl Fairing for CORS {
     async fn on_response<'r>(&self, request: &'r Request<'_>, response: &mut Response<'r>) {
         if let Some(origin) = request.headers().get_one("Origin") {
             response.set_header(Header::new("Access-Control-Allow-Origin", origin));
+        } else {
+            // Fallback for non-browser clients (e.g., mobile apps) that may not send Origin
+            response.set_header(Header::new("Access-Control-Allow-Origin", "*"));
         }
 
         response.set_header(Header::new(
@@ -158,6 +161,12 @@ fn rocket() -> Rocket<Build> {
                 routes::job::update_job_seeker_profile,
                 routes::job::search_job_seekers,
                 routes::job::delete_job_seeker_profile,
+                // Job Posts (User)
+                routes::job::create_job_post,
+                routes::job::get_my_jobs,
+                routes::job::get_public_jobs,
+                routes::job::get_job_by_id,
+                routes::job::upload_job_document,
                 // Admin Routes - Workers
                 routes::admin::get_all_workers,
                 routes::admin::verify_worker,

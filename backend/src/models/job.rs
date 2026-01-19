@@ -171,3 +171,100 @@ impl From<JobSeekerProfile> for JobSeekerProfileResponse {
         }
     }
 }
+
+// ================== JOB POSTS ==================
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct JobPost {
+    #[serde(rename = "_id", skip_serializing_if = "Option::is_none")]
+    pub id: Option<ObjectId>,
+    pub title: String,
+    pub company_name: String,
+    pub company_brief: Option<String>,
+    pub eligibility: Option<Vec<String>>,
+    pub requirements: Option<Vec<String>>,
+    pub job_role: String,
+    pub salary_min: Option<f64>,
+    pub salary_max: Option<f64>,
+    pub location: Option<String>,
+    pub hr_name: Option<String>,
+    pub hr_email: Option<String>,
+    pub hr_contact: Option<String>,
+    pub company_document_url: Option<String>,
+    pub status: String, // pending, approved, inactive
+    pub posted_by: ObjectId,
+    #[serde(default)]
+    pub applications: Vec<ObjectId>,
+    pub created_at: DateTime,
+    pub updated_at: DateTime,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(crate = "rocket::serde")]
+pub struct CreateJobPostDto {
+    pub title: String,
+    pub company_name: String,
+    pub company_brief: Option<String>,
+    pub eligibility: Option<Vec<String>>,
+    pub requirements: Option<Vec<String>>,
+    pub job_role: String,
+    pub salary_min: Option<f64>,
+    pub salary_max: Option<f64>,
+    pub location: Option<String>,
+    pub hr_name: Option<String>,
+    pub hr_email: Option<String>,
+    pub hr_contact: Option<String>,
+    pub company_document_url: Option<String>,
+}
+
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct JobPostResponse {
+    pub id: String,
+    pub title: String,
+    pub company_name: String,
+    pub company_brief: Option<String>,
+    pub eligibility: Option<Vec<String>>,
+    pub requirements: Option<Vec<String>>,
+    pub job_role: String,
+    pub salary_min: Option<f64>,
+    pub salary_max: Option<f64>,
+    pub location: Option<String>,
+    pub hr_name: Option<String>,
+    pub hr_email: Option<String>,
+    pub hr_contact: Option<String>,
+    pub company_document_url: Option<String>,
+    pub status: String,
+    pub posted_by: String,
+    pub applications: Vec<String>,
+    #[schemars(skip)]
+    pub created_at: DateTime,
+    #[schemars(skip)]
+    pub updated_at: DateTime,
+}
+
+impl From<JobPost> for JobPostResponse {
+    fn from(job: JobPost) -> Self {
+        JobPostResponse {
+            id: job.id.unwrap().to_hex(),
+            title: job.title,
+            company_name: job.company_name,
+            company_brief: job.company_brief,
+            eligibility: job.eligibility,
+            requirements: job.requirements,
+            job_role: job.job_role,
+            salary_min: job.salary_min,
+            salary_max: job.salary_max,
+            location: job.location,
+            hr_name: job.hr_name,
+            hr_email: job.hr_email,
+            hr_contact: job.hr_contact,
+            company_document_url: job.company_document_url,
+            status: job.status,
+            posted_by: job.posted_by.to_hex(),
+            applications: job.applications.into_iter().map(|id| id.to_hex()).collect(),
+            created_at: job.created_at,
+            updated_at: job.updated_at,
+        }
+    }
+}

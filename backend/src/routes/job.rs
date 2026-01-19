@@ -9,6 +9,10 @@ use crate::models::{Subscription, JobSeekerSubscriptionPlan, SubscriptionType, S
 use crate::guards::{AuthGuard, KycGuard};
 use crate::utils::{ApiResponse, ApiError};
 use crate::services::RazorpayService;
+use rocket::fs::TempFile;
+use crate::models::{JobPost, JobPostResponse};
+use uuid::Uuid;
+use crate::routes::file_upload::{get_extension_from_filename, extension_from_content_type, is_valid_document_extension};
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
 use mongodb::bson::oid::ObjectId;
@@ -378,6 +382,286 @@ pub async fn get_job_seeker_profile_by_id(
         .ok_or_else(|| ApiError::not_found("Job seeker profile not found"))?;
 
     Ok(Json(ApiResponse::success(serde_json::json!(profile))))
+}
+
+// ==================== JOB POSTS (USER) ====================
+
+#[derive(serde::Deserialize, rocket_okapi::okapi::schemars::JsonSchema)]
+pub struct CreateJobDto {
+    pub title: String,
+    pub company_name: String,
+    pub company_brief: Option<String>,
+    pub eligibility: Option<Vec<String>>,
+    pub requirements: Option<Vec<String>>,
+    pub job_role: String,
+    pub salary_min: Option<f64>,
+    pub salary_max: Option<f64>,
+    pub location: Option<String>,
+    pub hr_name: Option<String>,
+    pub hr_email: Option<String>,
+    pub hr_contact: Option<String>,
+    pub company_document_url: Option<String>,
+}
+
+#[openapi(tag = "Jobs")]
+#[post("/jobs", data = "<dto>")]
+pub async fn create_job_post(
+    db: &State<DbConn>,
+    auth: AuthGuard,
+    dto: Json<CreateJobDto>,
+) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
+    // Validate required fields
+    if dto.title.trim().is_empty() {
+        return Err(ApiError::bad_request("Title is required"));
+    }
+    if dto.company_name.trim().is_empty() {
+        return Err(ApiError::bad_request("Company name is required"));
+    }
+
+    let now = DateTime::now();
+
+    let job = crate::models::JobPost {
+        id: None,
+        title: dto.title.clone(),
+        company_name: dto.company_name.clone(),
+        company_brief: dto.company_brief.clone(),
+        eligibility: dto.eligibility.clone(),
+        requirements: dto.requirements.clone(),
+        job_role: dto.job_role.clone(),
+        salary_min: dto.salary_min,
+        salary_max: dto.salary_max,
+        location: dto.location.clone(),
+        hr_name: dto.hr_name.clone(),
+        hr_email: dto.hr_email.clone(),
+        hr_contact: dto.hr_contact.clone(),
+        company_document_url: dto.company_document_url.clone(),
+        status: "pending".to_string(),
+        posted_by: auth.user_id,
+        applications: Vec::new(),
+        created_at: now,
+        updated_at: now,
+    };
+
+    let res = db.collection::<crate::models::JobPost>("jobs")
+        .insert_one(&job, None)
+        .await
+        .map_err(|e| ApiError::internal_error(format!("Failed to create job: {}", e)))?;
+
+    let job_id = res.inserted_id.as_object_id()
+        .ok_or_else(|| ApiError::internal_error("Invalid job ID"))?
+        .to_hex();
+
+    Ok(Json(ApiResponse::success_with_message(
+        "Job created and pending admin approval".to_string(),
+        serde_json::json!({ "job_id": job_id })
+    )))
+}
+
+#[derive(FromForm, serde::Deserialize, rocket_okapi::okapi::schemars::JsonSchema)]
+pub struct MyJobsQuery {
+    pub status: Option<String>, // pending, approved, inactive
+    pub page: Option<i64>,
+    pub limit: Option<i64>,
+}
+
+#[openapi(tag = "Jobs")]
+#[get("/jobs/my?<query..>")]
+pub async fn get_my_jobs(
+    db: &State<DbConn>,
+    auth: AuthGuard,
+    query: MyJobsQuery,
+) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
+    let page = query.page.unwrap_or(1).max(1);
+    let limit = query.limit.unwrap_or(20).min(100);
+    let skip = (page - 1) * limit;
+
+    let mut filter = doc! { "posted_by": auth.user_id };
+    if let Some(status) = query.status {
+        filter.insert("status", status);
+    }
+
+    let find_options = FindOptions::builder()
+        .skip(skip as u64)
+        .limit(limit)
+        .sort(doc!{ "created_at": -1 })
+        .build();
+
+    let mut cursor = db.collection::<crate::models::JobPost>("jobs")
+        .find(filter.clone(), find_options)
+        .await
+        .map_err(|e| ApiError::internal_error(format!("Database error: {}", e)))?;
+
+    let mut jobs: Vec<crate::models::JobPostResponse> = Vec::new();
+    while cursor.advance().await.map_err(|e| ApiError::internal_error(format!("Cursor error: {}", e)))? {
+        let job = cursor.deserialize_current().map_err(|e| ApiError::internal_error(format!("Deserialization error: {}", e)))?;
+        jobs.push(job.into());
+    }
+
+    let total = db.collection::<crate::models::JobPost>("jobs")
+        .count_documents(filter, None)
+        .await
+        .map_err(|e| ApiError::internal_error(format!("Count error: {}", e)))?;
+
+    Ok(Json(ApiResponse::success(serde_json::json!({
+        "jobs": jobs,
+        "pagination": {
+            "page": page,
+            "limit": limit,
+            "total": total,
+            "pages": (total as f64 / limit as f64).ceil() as i64,
+        }
+    }))))
+}
+
+#[derive(FromForm, serde::Deserialize, rocket_okapi::okapi::schemars::JsonSchema)]
+pub struct PublicJobsQuery {
+    pub page: Option<i64>,
+    pub limit: Option<i64>,
+    pub location: Option<String>,
+    pub q: Option<String>,
+}
+
+#[openapi(tag = "Jobs")]
+#[get("/jobs?<query..>")]
+pub async fn get_public_jobs(
+    db: &State<DbConn>,
+    query: PublicJobsQuery,
+) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
+    let page = query.page.unwrap_or(1).max(1);
+    let limit = query.limit.unwrap_or(20).min(100);
+    let skip = (page - 1) * limit;
+
+    let mut filter = doc! { "status": "approved" };
+
+    if let Some(location) = query.location {
+        filter.insert("location", location);
+    }
+
+    if let Some(q) = query.q {
+        if !q.is_empty() {
+            filter.insert("$or", vec![
+                doc! { "title": { "$regex": &q, "$options": "i" } },
+                doc! { "company_name": { "$regex": &q, "$options": "i" } },
+                doc! { "job_role": { "$regex": &q, "$options": "i" } },
+            ]);
+        }
+    }
+
+    let find_options = FindOptions::builder()
+        .skip(skip as u64)
+        .limit(limit)
+        .sort(doc!{ "created_at": -1 })
+        .build();
+
+    let mut cursor = db.collection::<crate::models::JobPost>("jobs")
+        .find(filter.clone(), find_options)
+        .await
+        .map_err(|e| ApiError::internal_error(format!("Database error: {}", e)))?;
+
+    let mut jobs: Vec<crate::models::JobPostResponse> = Vec::new();
+    while cursor.advance().await.map_err(|e| ApiError::internal_error(format!("Cursor error: {}", e)))? {
+        let job = cursor.deserialize_current().map_err(|e| ApiError::internal_error(format!("Deserialization error: {}", e)))?;
+        jobs.push(job.into());
+    }
+
+    let total = db.collection::<crate::models::JobPost>("jobs")
+        .count_documents(filter, None)
+        .await
+        .map_err(|e| ApiError::internal_error(format!("Count error: {}", e)))?;
+
+    Ok(Json(ApiResponse::success(serde_json::json!({
+        "jobs": jobs,
+        "pagination": {
+            "page": page,
+            "limit": limit,
+            "total": total,
+            "pages": (total as f64 / limit as f64).ceil() as i64,
+        }
+    }))))
+}
+
+#[openapi(tag = "Jobs")]
+#[get("/jobs/<job_id>")]
+pub async fn get_job_by_id(
+    db: &State<DbConn>,
+    auth: Option<AuthGuard>,
+    job_id: String,
+) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
+    let object_id = ObjectId::parse_str(&job_id).map_err(|_| ApiError::bad_request("Invalid job ID"))?;
+
+    let job = db.collection::<crate::models::JobPost>("jobs")
+        .find_one(doc! { "_id": object_id }, None)
+        .await
+        .map_err(|e| ApiError::internal_error(format!("Database error: {}", e)))?
+        .ok_or_else(|| ApiError::not_found("Job not found"))?;
+
+    // If job is not approved, only owner or admin should see
+    if job.status != "approved" {
+        if let Some(auth) = auth {
+            if auth.user_id != job.posted_by {
+                return Err(ApiError::not_found("Job not found"));
+            }
+        } else {
+            return Err(ApiError::not_found("Job not found"));
+        }
+    }
+
+    // Convert to response explicitly to avoid type inference issues
+    let response: crate::models::JobPostResponse = job.into();
+    Ok(Json(ApiResponse::success(serde_json::json!(response))))
+}
+
+#[openapi(tag = "Jobs")]
+#[post("/jobs/<job_id>/document", data = "<file>")]
+pub async fn upload_job_document(
+    mut file: TempFile<'_>,
+    db: &State<DbConn>,
+    auth: AuthGuard,
+    job_id: String,
+) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
+    let object_id = ObjectId::parse_str(&job_id).map_err(|_| ApiError::bad_request("Invalid job ID"))?;
+
+    let job = db.collection::<crate::models::JobPost>("jobs")
+        .find_one(doc! { "_id": object_id }, None)
+        .await
+        .map_err(|e| ApiError::internal_error(format!("Database error: {}", e)))?
+        .ok_or_else(|| ApiError::not_found("Job not found"))?;
+
+    if job.posted_by != auth.user_id {
+        return Err(ApiError::bad_request("Unauthorized"));
+    }
+
+    // Reuse document upload logic from file_upload.rs but save into uploads/documents/jobs
+    let extension = if let Some(name) = file.name() {
+        get_extension_from_filename(name).ok_or_else(|| ApiError::bad_request("Cannot determine file extension"))?
+    } else if let Some(ct) = file.content_type() {
+        let ct_str = ct.to_string();
+        extension_from_content_type(&ct_str).ok_or_else(|| ApiError::bad_request("Cannot determine file extension from content type"))?
+    } else {
+        return Err(ApiError::bad_request("Cannot determine file type"));
+    };
+
+    if !is_valid_document_extension(&extension) {
+        return Err(ApiError::bad_request("Invalid document type"));
+    }
+
+    let upload_dir = "uploads/documents/jobs";
+    tokio::fs::create_dir_all(upload_dir).await.map_err(|e| ApiError::internal_error(format!("Failed to create directory: {}", e)))?;
+
+    let filename = format!("{}_{}.{}", Uuid::new_v4(), chrono::Utc::now().timestamp(), extension);
+    let filepath = format!("{}/{}", upload_dir, filename);
+
+    file.persist_to(&filepath).await.map_err(|e| ApiError::internal_error(format!("Failed to save file: {}", e)))?;
+
+    let file_url = std::env::var("APP_BASE_URL").map(|base| format!("{}{}", base.trim_end_matches('/'), format!("/{}", filepath))).unwrap_or_else(|_| format!("/{}", filepath));
+
+    db.collection::<crate::models::JobPost>("jobs").update_one(
+        doc! { "_id": object_id },
+        doc! { "$set": { "company_document_url": file_url.clone(), "updated_at": DateTime::now() } },
+        None
+    ).await.map_err(|e| ApiError::internal_error(format!("Failed to update job: {}", e)))?;
+
+    Ok(Json(ApiResponse::success(serde_json::json!({ "url": file_url, "message": "Document uploaded" }))))
 }
 
 #[openapi(tag = "JobSeeker")]

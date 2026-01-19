@@ -42,12 +42,13 @@ pub async fn create_subscription(
         chrono::Utc::now().timestamp_millis() + 365 * 24 * 60 * 60 * 1000,
     );
  
-    // Check if user already has an active subscription
+    // Check if user already has an active subscription (worker)
     let existing = db
         .collection::<Subscription>("subscriptions")
         .find_one(
             doc! { 
                 "user_id": auth.user_id,
+                "subscription_type": "worker",
                 "status": "active"
             },
             None,
@@ -71,7 +72,7 @@ pub async fn create_subscription(
         subscription_type: SubscriptionType::Worker,
         plan_name: plan_name.clone(),
         price,
-        status: SubscriptionStatus::Cancelled, // Will be updated after payment
+        status: SubscriptionStatus::Pending, // Will be updated after payment
         starts_at: now,
         expires_at,
         auto_renew: false,
@@ -113,33 +114,45 @@ pub async fn verify_subscription_payment(
     auth: AuthGuard,
     dto: Json<VerifySubscriptionPaymentDto>,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
-    
-    // Verify Razorpay signature
+    /* ------------------------------------------------------------------ */
+    /* 1. VERIFY RAZORPAY SIGNATURE                                        */
+    /* ------------------------------------------------------------------ */
+
     let secret = std::env::var("RAZORPAY_KEY_SECRET")
         .map_err(|_| ApiError::internal_error("Missing Razorpay secret"))?;
 
-    let payload = format!("{}|{}", dto.razorpay_order_id, dto.razorpay_payment_id);
-    
+    let payload = format!(
+        "{}|{}",
+        dto.razorpay_order_id,
+        dto.razorpay_payment_id
+    );
+
     let mut mac = Hmac::<Sha256>::new_from_slice(secret.as_bytes())
         .map_err(|_| ApiError::internal_error("Invalid HMAC key"))?;
-    
+
     mac.update(payload.as_bytes());
+
     let expected_signature = hex::encode(mac.finalize().into_bytes());
 
     if expected_signature != dto.razorpay_signature {
         return Err(ApiError::bad_request("Invalid payment signature"));
     }
 
-    // Update subscription status
-    let sub_id = ObjectId::parse_str(&dto.subscription_id)
+    /* ------------------------------------------------------------------ */
+    /* 2. ACTIVATE SUBSCRIPTION                                            */
+    /* ------------------------------------------------------------------ */
+
+    let subscription_id = ObjectId::parse_str(&dto.subscription_id)
         .map_err(|_| ApiError::bad_request("Invalid subscription ID"))?;
 
-    let result = db
+    let update_result = db
         .collection::<Subscription>("subscriptions")
         .update_one(
-            doc! { 
-                "_id": sub_id,
-                "user_id": auth.user_id 
+            doc! {
+                "_id": subscription_id,
+                "user_id": auth.user_id,
+                "subscription_type": "worker",
+                "status": { "$ne": "active" }
             },
             doc! {
                 "$set": {
@@ -153,17 +166,54 @@ pub async fn verify_subscription_payment(
         .await
         .map_err(|e| ApiError::internal_error(e.to_string()))?;
 
-    if result.matched_count == 0 {
-        return Err(ApiError::not_found("Subscription not found"));
+    if update_result.matched_count == 0 {
+        return Err(ApiError::not_found(
+            "Subscription not found or already active",
+        ));
     }
 
-    // Get the subscription details
+    /* ------------------------------------------------------------------ */
+    /* 3. FETCH UPDATED SUBSCRIPTION                                       */
+    /* ------------------------------------------------------------------ */
+
     let subscription = db
         .collection::<Subscription>("subscriptions")
-        .find_one(doc! { "_id": sub_id }, None)
+        .find_one(doc! { "_id": subscription_id }, None)
         .await
         .map_err(|e| ApiError::internal_error(e.to_string()))?
         .ok_or_else(|| ApiError::not_found("Subscription not found"))?;
+
+    let sub_oid = subscription
+        .id
+        .clone()
+        .ok_or_else(|| ApiError::internal_error("Subscription missing ID"))?;
+
+    /* ------------------------------------------------------------------ */
+    /* 4. UPDATE USER (FLAT FIELDS ONLY)                                   */
+    /* ------------------------------------------------------------------ */
+
+    db.collection::<mongodb::bson::Document>("users")
+        .update_one(
+            doc! { "_id": auth.user_id },
+            doc! {
+                "$set": {
+                    "subscription_id": sub_oid,
+                    "subscription_plan": &subscription.plan_name,
+                    "subscription_expires_at": subscription.expires_at,
+                    "updated_at": DateTime::now()
+                }
+            },
+            None,
+        )
+        .await
+        .map_err(|e| ApiError::internal_error(format!(
+            "Failed to update user subscription: {}",
+            e
+        )))?;
+
+    /* ------------------------------------------------------------------ */
+    /* 5. RESPONSE                                                         */
+    /* ------------------------------------------------------------------ */
 
     Ok(Json(ApiResponse::success(serde_json::json!({
         "message": "Payment verified successfully",
@@ -188,6 +238,7 @@ pub async fn get_subscription_status(
         .find_one(
             doc! { 
                 "user_id": auth.user_id,
+                "subscription_type": "worker",
                 "status": "active"
             },
             None,
@@ -227,12 +278,13 @@ pub async fn create_worker_profile(
 ) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
     let auth = kyc_guard.auth;
     
-    // Check if user has active subscription
+    // Check if user has active subscription (worker)
     let has_subscription = db
         .collection::<Subscription>("subscriptions")
         .find_one(
             doc! { 
                 "user_id": auth.user_id,
+                "subscription_type": "worker",
                 "status": "active"
             },
             None,
@@ -471,7 +523,6 @@ pub async fn find_nearby_workers(
     let limit = query.limit.unwrap_or(20).min(50);
     let skip = (page - 1) * limit;
 
-    // CRITICAL FIX: Build filter WITHOUT geo query first
     let mut match_filter = doc! {
         "is_verified": true,
         "is_available": true,
@@ -485,8 +536,8 @@ pub async fn find_nearby_workers(
         match_filter.insert("subcategories", subcategory);
     }
 
-    // Use aggregation pipeline with $geoNear (works better than find with $nearSphere)
     let pipeline = vec![
+        // 1️⃣ GEO SEARCH (uses 2dsphere index)
         doc! {
             "$geoNear": {
                 "near": {
@@ -494,43 +545,86 @@ pub async fn find_nearby_workers(
                     "coordinates": [query.longitude, query.latitude]
                 },
                 "distanceField": "distance",
-                "maxDistance": 10000,
+                "maxDistance": 10_000,
                 "spherical": true,
                 "key": "location"
             }
         },
+
+        // 2️⃣ FILTER EARLY
+        doc! { "$match": match_filter.clone() },
+
+        // 3️⃣ LOOKUP USER (PIPELINE + PROJECTION = FAST)
         doc! {
-            "$match": match_filter.clone()
+            "$lookup": {
+                "from": "users",
+                "let": { "uid": "$user_id" },
+                "pipeline": [
+                    {
+                        "$match": {
+                            "$expr": { "$eq": ["$_id", "$$uid"] }
+                        }
+                    },
+                    {
+                        "$project": {
+                            "_id": 0,
+                            "name": 1,
+                            "mobile": 1
+                        }
+                    }
+                ],
+                "as": "user"
+            }
         },
+
+        // 4️⃣ FLATTEN USER
+        doc! { "$unwind": "$user" },
+
+        // 5️⃣ EXPOSE FIELDS FOR FRONTEND
         doc! {
-            "$skip": skip
+            "$addFields": {
+                "phone": "$user.mobile",
+                "name": "$user.name"
+            }
         },
-        doc! {
-            "$limit": limit
-        },
+
+        // 6️⃣ SORT (after filtering, before pagination)
         doc! {
             "$sort": {
                 "distance": 1,
                 "subscription_plan": -1,
                 "rating": -1
             }
+        },
+
+        // 7️⃣ PAGINATION
+        doc! { "$skip": skip },
+        doc! { "$limit": limit },
+
+        // 8️⃣ CLEAN RESPONSE
+        doc! {
+            "$project": {
+                "user": 0
+            }
         }
     ];
 
     let mut cursor = db
-        .collection::<WorkerProfile>("worker_profiles")
-        .aggregate(pipeline.clone(), None)
+        .collection::<mongodb::bson::Document>("worker_profiles")
+        .aggregate(pipeline, None)
         .await
         .map_err(|e| ApiError::internal_error(format!("Aggregation error: {}", e)))?;
 
     let mut workers = Vec::new();
     while cursor.advance().await.map_err(|e| ApiError::internal_error(e.to_string()))? {
-        let doc = cursor.deserialize_current()
-            .map_err(|e| ApiError::internal_error(e.to_string()))?;
-        workers.push(doc);
+        workers.push(
+            cursor
+                .deserialize_current()
+                .map_err(|e| ApiError::internal_error(e.to_string()))?,
+        );
     }
 
-    // Count total (without skip/limit)
+    // ---------- COUNT (FAST + SAME FILTER) ----------
     let count_pipeline = vec![
         doc! {
             "$geoNear": {
@@ -539,17 +633,13 @@ pub async fn find_nearby_workers(
                     "coordinates": [query.longitude, query.latitude]
                 },
                 "distanceField": "distance",
-                "maxDistance": 10000,
+                "maxDistance": 10_000,
                 "spherical": true,
                 "key": "location"
             }
         },
-        doc! {
-            "$match": match_filter
-        },
-        doc! {
-            "$count": "total"
-        }
+        doc! { "$match": match_filter },
+        doc! { "$count": "total" }
     ];
 
     let mut count_cursor = db
@@ -562,7 +652,7 @@ pub async fn find_nearby_workers(
         count_cursor
             .deserialize_current()
             .ok()
-            .and_then(|doc| doc.get_i64("total").ok())
+            .and_then(|d| d.get_i64("total").ok())
             .unwrap_or(0)
     } else {
         0

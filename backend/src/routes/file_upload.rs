@@ -26,7 +26,7 @@ pub struct Base64UploadRequest {
 // HELPER FUNCTIONS
 // ============================================================================
 
-fn get_extension_from_filename(name: &str) -> Option<String> {
+pub(crate) fn get_extension_from_filename(name: &str) -> Option<String> {
     if let Some(ext) = Path::new(name).extension() {
         return ext.to_str().map(|s| s.to_lowercase());
     }
@@ -44,11 +44,11 @@ fn is_valid_image_extension(ext: &str) -> bool {
     matches!(ext, "jpg" | "jpeg" | "png" | "webp")
 }
 
-fn is_valid_document_extension(ext: &str) -> bool {
+pub(crate) fn is_valid_document_extension(ext: &str) -> bool {
     matches!(ext, "pdf" | "jpg" | "jpeg" | "png")
 }
 
-fn extension_from_content_type(content_type: &str) -> Option<String> {
+pub(crate) fn extension_from_content_type(content_type: &str) -> Option<String> {
     match content_type {
         "image/jpeg" => Some("jpg".to_string()),
         "image/jpg" => Some("jpg".to_string()),
@@ -189,7 +189,10 @@ pub async fn upload_image(
             ApiError::internal_error(format!("Failed to save file: {}", e))
         })?;
     
-    let file_url = format!("/{}", filepath);
+    // Prefer absolute URL when APP_BASE_URL is configured (helps mobile apps load images)
+    let file_url = std::env::var("APP_BASE_URL").map(|base| {
+        format!("{}{}", base.trim_end_matches('/'), format!("/{}", filepath))
+    }).unwrap_or_else(|_| format!("/{}", filepath));
     
     println!("✓ File saved successfully!");
     println!("✓ File URL: {}", file_url);
@@ -311,7 +314,10 @@ pub async fn upload_document(
             ApiError::internal_error(format!("Failed to save file: {}", e))
         })?;
     
-    let file_url = format!("/{}", filepath);
+    // Prefer absolute URL when APP_BASE_URL is configured (helps mobile apps load documents)
+    let file_url = std::env::var("APP_BASE_URL").map(|base| {
+        format!("{}{}", base.trim_end_matches('/'), format!("/{}", filepath))
+    }).unwrap_or_else(|_| format!("/{}", filepath));
     
     println!("✓ File saved successfully!");
     println!("✓ File URL: {}", file_url);
@@ -408,7 +414,10 @@ pub async fn upload_document_base64(
             ApiError::internal_error(format!("Failed to save file: {}", e))
         })?;
     
-    let file_url = format!("/{}", filepath);
+    // Prefer absolute URL when APP_BASE_URL is configured (helps mobile apps load documents)
+    let file_url = std::env::var("APP_BASE_URL").map(|base| {
+        format!("{}{}", base.trim_end_matches('/'), format!("/{}", filepath))
+    }).unwrap_or_else(|_| format!("/{}", filepath));
     
     println!("✓ File saved successfully!");
     println!("✓ File URL: {}", file_url);
