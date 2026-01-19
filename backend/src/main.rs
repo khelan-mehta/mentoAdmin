@@ -174,6 +174,7 @@ fn rocket() -> Rocket<Build> {
                 routes::admin::delete_subcategory,
                 // Admin Routes - Jobs
                 routes::admin::get_all_jobs,
+                routes::admin::create_job,
                 routes::admin::update_job_status,
                 routes::admin::delete_job,
                 // Admin Routes - Users

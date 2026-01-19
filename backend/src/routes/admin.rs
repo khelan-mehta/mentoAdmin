@@ -31,63 +31,55 @@ struct Service {
 pub async fn get_all_categories(
     db: &State<DbConn>,
 ) -> Result<Json<ApiResponse<Vec<CategoryResponse>>>, ApiError> {
-    // Fetch all main categories from the main_categories collection
-    let mut main_cursor = db
-        .collection::<MainCategory>("main_categories")
+    // Fetch all services from the services collection
+    let mut cursor = db
+        .collection::<Service>("services")
         .find(None, None)
         .await
         .map_err(|e| ApiError::internal_error(format!("Database error: {}", e)))?;
 
-    let mut main_categories = Vec::new();
-    while main_cursor
+    let mut services = Vec::new();
+    while cursor
         .advance()
         .await
         .map_err(|e| ApiError::internal_error(format!("Cursor error: {}", e)))?
     {
-        let main_cat = main_cursor
+        let service = cursor
             .deserialize_current()
             .map_err(|e| ApiError::internal_error(format!("Deserialization error: {}", e)))?;
-        main_categories.push(main_cat);
+        services.push(service);
     }
 
-    // For each main category, fetch subcategories (may be empty)
+    // Group services by serviceCategory
+    let mut categories_map: HashMap<String, Vec<Service>> = HashMap::new();
+    for service in services {
+        categories_map
+            .entry(service.service_category.clone())
+            .or_insert_with(Vec::new)
+            .push(service);
+    }
+
+    // Build CategoryResponse objects
     let mut categories: Vec<CategoryResponse> = Vec::new();
+    for (category_name, services) in categories_map {
+        // Use first service's icon for the category
+        let icon = services.first().map(|s| s.icon.clone());
 
-    for main_cat in main_categories {
-        let main_id = match main_cat.id {
-            Some(id) => id,
-            None => continue,
-        };
-
-        let mut sub_cursor = db
-            .collection::<SubCategory>("sub_categories")
-            .find(doc! { "main_category_id": main_id }, None)
-            .await
-            .map_err(|e| ApiError::internal_error(format!("Database error: {}", e)))?;
-
-        let mut subcategories_vec: Vec<SubCategoryResponse> = Vec::new();
-        while sub_cursor
-            .advance()
-            .await
-            .map_err(|e| ApiError::internal_error(format!("Cursor error: {}", e)))?
-        {
-            let sub = sub_cursor
-                .deserialize_current()
-                .map_err(|e| ApiError::internal_error(format!("Deserialization error: {}", e)))?;
-
-            subcategories_vec.push(SubCategoryResponse {
-                id: sub.id.unwrap().to_hex(),
-                name: sub.name,
-                description: sub.description,
-            });
-        }
+        let subcategories: Vec<SubCategoryResponse> = services
+            .iter()
+            .map(|s| SubCategoryResponse {
+                id: s.id.to_hex(),
+                name: s.name.clone(),
+                description: Some(s.description.clone()),
+            })
+            .collect();
 
         categories.push(CategoryResponse {
-            id: main_id.to_hex(),
-            name: main_cat.name,
-            description: main_cat.description,
-            icon: main_cat.icon,
-            subcategories: subcategories_vec,
+            id: category_name.clone(), // Use category name as ID since we don't have a separate category ID
+            name: category_name,
+            description: None,
+            icon,
+            subcategories,
         });
     }
 
@@ -176,9 +168,32 @@ pub async fn get_all_workers(
 
     let mut workers = Vec::new();
     while cursor.advance().await.map_err(|e| ApiError::internal_error(format!("Cursor error: {}", e)))? {
-        let worker = cursor.deserialize_current()
+        let mut worker = cursor.deserialize_current()
             .map_err(|e| ApiError::internal_error(format!("Deserialization error: {}", e)))?;
         workers.push(worker);
+    }
+
+    // Fetch user data for each worker
+    let mut workers_with_user_data = Vec::new();
+    for worker in workers {
+        let mut worker_json = serde_json::to_value(&worker)
+            .map_err(|e| ApiError::internal_error(format!("Serialization error: {}", e)))?;
+
+        // Fetch user data
+        if let Ok(user) = db.collection::<User>("users")
+            .find_one(doc! { "_id": worker.user_id }, None)
+            .await
+        {
+            if let Some(user) = user {
+                if let Some(obj) = worker_json.as_object_mut() {
+                    obj.insert("user_name".to_string(), serde_json::json!(user.name));
+                    obj.insert("user_mobile".to_string(), serde_json::json!(user.mobile));
+                    obj.insert("user_email".to_string(), serde_json::json!(user.email));
+                }
+            }
+        }
+
+        workers_with_user_data.push(worker_json);
     }
 
     let total = db.collection::<WorkerProfile>("worker_profiles")
@@ -187,7 +202,7 @@ pub async fn get_all_workers(
         .map_err(|e| ApiError::internal_error(format!("Count error: {}", e)))?;
 
     Ok(Json(ApiResponse::success(serde_json::json!({
-        "workers": workers,
+        "workers": workers_with_user_data,
         "pagination": {
             "page": page,
             "limit": limit,
@@ -268,13 +283,36 @@ pub async fn get_all_job_seekers(
         profiles.push(profile);
     }
 
+    // Fetch user data for each job seeker profile
+    let mut profiles_with_user_data = Vec::new();
+    for profile in profiles {
+        let mut profile_json = serde_json::to_value(&profile)
+            .map_err(|e| ApiError::internal_error(format!("Serialization error: {}", e)))?;
+
+        // Fetch user data
+        if let Ok(user) = db.collection::<User>("users")
+            .find_one(doc! { "_id": profile.user_id }, None)
+            .await
+        {
+            if let Some(user) = user {
+                if let Some(obj) = profile_json.as_object_mut() {
+                    obj.insert("user_mobile".to_string(), serde_json::json!(user.mobile));
+                    obj.insert("user_email".to_string(), serde_json::json!(user.email));
+                    obj.insert("user_photo".to_string(), serde_json::json!(user.profile_photo));
+                }
+            }
+        }
+
+        profiles_with_user_data.push(profile_json);
+    }
+
     let total = db.collection::<JobSeekerProfile>("job_seeker_profiles")
         .count_documents(filter, None)
         .await
         .map_err(|e| ApiError::internal_error(format!("Count error: {}", e)))?;
 
     Ok(Json(ApiResponse::success(serde_json::json!({
-        "profiles": profiles,
+        "profiles": profiles_with_user_data,
         "pagination": {
             "page": page,
             "limit": limit,
@@ -331,26 +369,12 @@ pub async fn create_category(
     db: &State<DbConn>,
     dto: Json<CreateCategoryDto>,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
-    let category = MainCategory {
-        id: None,
-        name: dto.name.clone(),
-        description: dto.description.clone(),
-        icon: dto.icon.clone(),
-        is_active: dto.is_active.unwrap_or(true),
-        order: dto.order.unwrap_or(0),
-        created_at: DateTime::now(),
-        updated_at: DateTime::now(),
-    };
-
-    let result = db.collection::<MainCategory>("main_categories")
-        .insert_one(&category, None)
-        .await
-        .map_err(|e| ApiError::internal_error(format!("Failed to create category: {}", e)))?;
-
+    // Categories are now derived from serviceCategory field in services
+    // This endpoint just returns success with the category name as ID
     Ok(Json(ApiResponse::success_with_message(
-        "Category created successfully".to_string(),
+        "Category created successfully (Note: Categories are auto-created when services are added)".to_string(),
         serde_json::json!({
-            "id": result.inserted_id.as_object_id().unwrap().to_hex()
+            "id": dto.name.clone()
         })
     )))
 }
@@ -362,38 +386,18 @@ pub async fn update_category(
     category_id: String,
     dto: Json<CreateCategoryDto>,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
-    let object_id = ObjectId::parse_str(&category_id)
-        .map_err(|_| ApiError::bad_request("Invalid category ID"))?;
-
-    let mut update_doc = doc! {
-        "name": &dto.name,
-        "updated_at": DateTime::now(),
-    };
-
-    if let Some(ref desc) = dto.description {
-        update_doc.insert("description", desc);
-    }
-    if let Some(ref icon) = dto.icon {
-        update_doc.insert("icon", icon);
-    }
-    if let Some(order) = dto.order {
-        update_doc.insert("order", order);
-    }
-    if let Some(is_active) = dto.is_active {
-        update_doc.insert("is_active", is_active);
-    }
-
-    db.collection::<MainCategory>("main_categories")
-        .update_one(
-            doc! { "_id": object_id },
-            doc! { "$set": update_doc },
+    // Update serviceCategory field for all services in this category
+    let result = db.collection::<Service>("services")
+        .update_many(
+            doc! { "serviceCategory": &category_id },
+            doc! { "$set": { "serviceCategory": &dto.name } },
             None
         )
         .await
         .map_err(|e| ApiError::internal_error(format!("Failed to update category: {}", e)))?;
 
     Ok(Json(ApiResponse::success(serde_json::json!({
-        "message": "Category updated successfully"
+        "message": format!("Category updated successfully ({} services affected)", result.modified_count)
     }))))
 }
 
@@ -403,21 +407,14 @@ pub async fn delete_category(
     db: &State<DbConn>,
     category_id: String,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
-    let object_id = ObjectId::parse_str(&category_id)
-        .map_err(|_| ApiError::bad_request("Invalid category ID"))?;
-
-    db.collection::<SubCategory>("sub_categories")
-        .delete_many(doc! { "main_category_id": object_id }, None)
-        .await
-        .ok();
-
-    db.collection::<MainCategory>("main_categories")
-        .delete_one(doc! { "_id": object_id }, None)
+    // Delete all services with this serviceCategory
+    let result = db.collection::<Service>("services")
+        .delete_many(doc! { "serviceCategory": &category_id }, None)
         .await
         .map_err(|e| ApiError::internal_error(format!("Failed to delete category: {}", e)))?;
 
     Ok(Json(ApiResponse::success(serde_json::json!({
-        "message": "Category deleted successfully"
+        "message": format!("Category deleted successfully ({} services removed)", result.deleted_count)
     }))))
 }
 
@@ -425,11 +422,15 @@ pub async fn delete_category(
 
 #[derive(serde::Deserialize, rocket_okapi::okapi::schemars::JsonSchema)]
 pub struct CreateSubcategoryDto {
-    pub main_category_id: String,
-    pub name: String,
+    pub main_category_id: String, // This is now serviceCategory
+    pub name: String, // This is the service name
     pub description: Option<String>,
     pub order: Option<i32>,
     pub is_active: Option<bool>,
+    pub price: Option<String>,
+    pub rating: Option<String>,
+    pub icon: Option<String>,
+    pub color: Option<String>,
 }
 
 #[openapi(tag = "Admin - Categories")]
@@ -438,57 +439,26 @@ pub async fn create_subcategory(
     db: &State<DbConn>,
     dto: Json<CreateSubcategoryDto>,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
-    let main_category_id = if dto.main_category_id.len() == 24 {
-        ObjectId::parse_str(&dto.main_category_id)
-            .map_err(|_| ApiError::bad_request("Invalid main category ID"))?
-    } else {
-        let category_cursor = db.collection::<MainCategory>("main_categories")
-            .find_one(doc! { "name": &dto.main_category_id }, None)
-            .await
-            .map_err(|e| ApiError::internal_error(format!("Database error: {}", e)))?;
-
-        if let Some(category) = category_cursor {
-            category.id.ok_or_else(|| ApiError::bad_request("Category missing ID"))?
-        } else {
-            let new_category = MainCategory {
-                id: None,
-                name: dto.main_category_id.clone(),
-                description: None,
-                icon: None,
-                is_active: true,
-                order: 0,
-                created_at: DateTime::now(),
-                updated_at: DateTime::now(),
-            };
-
-            let result = db.collection::<MainCategory>("main_categories")
-                .insert_one(&new_category, None)
-                .await
-                .map_err(|e| ApiError::internal_error(format!("Failed to create category: {}", e)))?;
-
-            result.inserted_id.as_object_id()
-                .ok_or_else(|| ApiError::internal_error("Failed to get inserted category ID"))?
-        }
-    };
-
-    let subcategory = SubCategory {
-        id: None,
-        main_category_id,
+    // Create a new service
+    let service = Service {
+        id: ObjectId::new(),
+        service_id: format!("SRV-{}", ObjectId::new().to_hex()),
         name: dto.name.clone(),
-        description: dto.description.clone(),
-        is_active: dto.is_active.unwrap_or(true),
-        order: dto.order.unwrap_or(0),
-        created_at: DateTime::now(),
-        updated_at: DateTime::now(),
+        service_category: dto.main_category_id.clone(),
+        price: dto.price.clone().unwrap_or_else(|| "0".to_string()),
+        rating: dto.rating.clone().unwrap_or_else(|| "0.0".to_string()),
+        description: dto.description.clone().unwrap_or_default(),
+        icon: dto.icon.clone().unwrap_or_default(),
+        color: dto.color.clone().unwrap_or_else(|| "#0EA5E9".to_string()),
     };
 
-    let result = db.collection::<SubCategory>("sub_categories")
-        .insert_one(&subcategory, None)
+    let result = db.collection::<Service>("services")
+        .insert_one(&service, None)
         .await
-        .map_err(|e| ApiError::internal_error(format!("Failed to create subcategory: {}", e)))?;
+        .map_err(|e| ApiError::internal_error(format!("Failed to create service: {}", e)))?;
 
     Ok(Json(ApiResponse::success_with_message(
-        "Subcategory created successfully".to_string(),
+        "Service (subcategory) created successfully".to_string(),
         serde_json::json!({
             "id": result.inserted_id.as_object_id().unwrap().to_hex()
         })
@@ -503,34 +473,40 @@ pub async fn update_subcategory(
     dto: Json<CreateSubcategoryDto>,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
     let object_id = ObjectId::parse_str(&subcategory_id)
-        .map_err(|_| ApiError::bad_request("Invalid subcategory ID"))?;
+        .map_err(|_| ApiError::bad_request("Invalid service ID"))?;
 
     let mut update_doc = doc! {
         "name": &dto.name,
-        "updated_at": DateTime::now(),
+        "serviceCategory": &dto.main_category_id,
     };
 
     if let Some(ref desc) = dto.description {
         update_doc.insert("description", desc);
     }
-    if let Some(order) = dto.order {
-        update_doc.insert("order", order);
+    if let Some(ref price) = dto.price {
+        update_doc.insert("price", price);
     }
-    if let Some(is_active) = dto.is_active {
-        update_doc.insert("is_active", is_active);
+    if let Some(ref rating) = dto.rating {
+        update_doc.insert("rating", rating);
+    }
+    if let Some(ref icon) = dto.icon {
+        update_doc.insert("icon", icon);
+    }
+    if let Some(ref color) = dto.color {
+        update_doc.insert("color", color);
     }
 
-    db.collection::<SubCategory>("sub_categories")
+    db.collection::<Service>("services")
         .update_one(
             doc! { "_id": object_id },
             doc! { "$set": update_doc },
             None
         )
         .await
-        .map_err(|e| ApiError::internal_error(format!("Failed to update subcategory: {}", e)))?;
+        .map_err(|e| ApiError::internal_error(format!("Failed to update service: {}", e)))?;
 
     Ok(Json(ApiResponse::success(serde_json::json!({
-        "message": "Subcategory updated successfully"
+        "message": "Service (subcategory) updated successfully"
     }))))
 }
 
@@ -541,15 +517,15 @@ pub async fn delete_subcategory(
     subcategory_id: String,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
     let object_id = ObjectId::parse_str(&subcategory_id)
-        .map_err(|_| ApiError::bad_request("Invalid subcategory ID"))?;
+        .map_err(|_| ApiError::bad_request("Invalid service ID"))?;
 
-    db.collection::<SubCategory>("sub_categories")
+    db.collection::<Service>("services")
         .delete_one(doc! { "_id": object_id }, None)
         .await
-        .map_err(|e| ApiError::internal_error(format!("Failed to delete subcategory: {}", e)))?;
+        .map_err(|e| ApiError::internal_error(format!("Failed to delete service: {}", e)))?;
 
     Ok(Json(ApiResponse::success(serde_json::json!({
-        "message": "Subcategory deleted successfully"
+        "message": "Service (subcategory) deleted successfully"
     }))))
 }
 
@@ -633,9 +609,60 @@ pub async fn get_all_jobs(
 }
 
 #[derive(serde::Deserialize, rocket_okapi::okapi::schemars::JsonSchema)]
+pub struct CreateJobDto {
+    pub title: String,
+    pub company: Option<String>,
+    pub description: Option<String>,
+    pub location: Option<String>,
+    pub job_type: Option<String>,
+    pub category: Option<String>,
+    pub salary_min: Option<f64>,
+    pub salary_max: Option<f64>,
+    pub requirements: Option<Vec<String>>,
+}
+
+#[derive(serde::Deserialize, rocket_okapi::okapi::schemars::JsonSchema)]
 pub struct UpdateJobStatusDto {
     pub status: String,
     pub rejection_reason: Option<String>,
+}
+
+#[openapi(tag = "Admin - Jobs")]
+#[post("/admin/jobs", data = "<dto>")]
+pub async fn create_job(
+    db: &State<DbConn>,
+    dto: Json<CreateJobDto>,
+) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
+    let job = Job {
+        id: None,
+        title: dto.title.clone(),
+        company: dto.company.clone(),
+        description: dto.description.clone(),
+        location: dto.location.clone(),
+        job_type: dto.job_type.clone(),
+        category: dto.category.clone(),
+        salary_min: dto.salary_min,
+        salary_max: dto.salary_max,
+        requirements: dto.requirements.clone(),
+        status: "active".to_string(),
+        rejection_reason: None,
+        applications_count: 0,
+        posted_by: None,
+        created_at: DateTime::now(),
+        updated_at: DateTime::now(),
+    };
+
+    let result = db.collection::<Job>("jobs")
+        .insert_one(&job, None)
+        .await
+        .map_err(|e| ApiError::internal_error(format!("Failed to create job: {}", e)))?;
+
+    Ok(Json(ApiResponse::success_with_message(
+        "Job created successfully".to_string(),
+        serde_json::json!({
+            "id": result.inserted_id.as_object_id().unwrap().to_hex()
+        })
+    )))
 }
 
 #[openapi(tag = "Admin - Jobs")]

@@ -740,7 +740,8 @@ export const WorkerProfiles = () => {
               <thead>
                 <tr>
                   {[
-                    "User ID",
+                    "User Name",
+                    "Contact",
                     "Categories",
                     "Experience",
                     "Hourly Rate",
@@ -786,11 +787,19 @@ export const WorkerProfiles = () => {
                         padding: "16px",
                         fontWeight: "600",
                         color: theme.colors.text,
-                        fontSize: "13px",
-                        fontFamily: "monospace",
+                        fontSize: "14px",
                       }}
                     >
-                      {(worker.user_id?.$oid || worker.user_id)?.substring(0, 8)}...
+                      {worker.user_name || "N/A"}
+                    </td>
+                    <td
+                      style={{
+                        padding: "16px",
+                        color: theme.colors.textSecondary,
+                        fontSize: "13px",
+                      }}
+                    >
+                      {worker.user_mobile || worker.user_email || "N/A"}
                     </td>
                     <td style={{ padding: "16px", color: theme.colors.textSecondary }}>
                       <div style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>

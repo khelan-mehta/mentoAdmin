@@ -17,6 +17,8 @@ import {
   Star,
   Building,
   Calendar,
+  PhoneCall,
+  Mail,
 } from "lucide-react";
 
 // ==================== CONSTANTS ====================
@@ -134,22 +136,36 @@ const JobProfileDetailModal = ({ profile, onClose, onApprove, onReject, isLoadin
           {/* Header */}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "24px" }}>
             <div style={{ display: "flex", gap: "16px", alignItems: "flex-start" }}>
-              <div
-                style={{
-                  width: "64px",
-                  height: "64px",
-                  borderRadius: "50%",
-                  background: theme.colors.primary,
-                  color: "white",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: "24px",
-                  fontWeight: "700",
-                }}
-              >
-                {profile.full_name?.charAt(0) || "?"}
-              </div>
+              {profile.user_photo ? (
+                <img
+                  src={profile.user_photo}
+                  alt={profile.full_name}
+                  style={{
+                    width: "64px",
+                    height: "64px",
+                    borderRadius: "50%",
+                    objectFit: "cover",
+                    border: `2px solid ${theme.colors.border}`,
+                  }}
+                />
+              ) : (
+                <div
+                  style={{
+                    width: "64px",
+                    height: "64px",
+                    borderRadius: "50%",
+                    background: theme.colors.primary,
+                    color: "white",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: "24px",
+                    fontWeight: "700",
+                  }}
+                >
+                  {profile.full_name?.charAt(0) || "?"}
+                </div>
+              )}
               <div>
                 <h3 style={{ margin: 0, fontSize: "20px", fontWeight: "700", color: theme.colors.text }}>
                   {profile.full_name}
@@ -160,6 +176,21 @@ const JobProfileDetailModal = ({ profile, onClose, onApprove, onReject, isLoadin
                 <p style={{ margin: "4px 0 0", color: theme.colors.textSecondary, fontSize: "13px" }}>
                   {profile.experience_years ? `${profile.experience_years} years experience` : "Experience not specified"}
                 </p>
+                {/* Contact Information */}
+                <div style={{ marginTop: "8px", display: "flex", flexDirection: "column", gap: "4px" }}>
+                  {profile.user_mobile && (
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", color: theme.colors.textSecondary }}>
+                      <PhoneCall size={14} />
+                      {profile.user_mobile}
+                    </div>
+                  )}
+                  {profile.user_email && (
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", color: theme.colors.textSecondary }}>
+                      <Mail size={14} />
+                      {profile.user_email}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
             {getStatusBadge(profile.is_verified)}
@@ -754,22 +785,36 @@ export const JobProfiles = () => {
                   }}
                 >
                   <div style={{ display: "flex", gap: "12px" }}>
-                    <div
-                      style={{
-                        width: "48px",
-                        height: "48px",
-                        borderRadius: "50%",
-                        background: theme.colors.primary,
-                        color: "white",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        fontSize: "18px",
-                        fontWeight: "700",
-                      }}
-                    >
-                      {profile.full_name?.charAt(0) || "?"}
-                    </div>
+                    {profile.user_photo ? (
+                      <img
+                        src={profile.user_photo}
+                        alt={profile.full_name}
+                        style={{
+                          width: "48px",
+                          height: "48px",
+                          borderRadius: "50%",
+                          objectFit: "cover",
+                          border: `2px solid ${theme.colors.border}`,
+                        }}
+                      />
+                    ) : (
+                      <div
+                        style={{
+                          width: "48px",
+                          height: "48px",
+                          borderRadius: "50%",
+                          background: theme.colors.primary,
+                          color: "white",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          fontSize: "18px",
+                          fontWeight: "700",
+                        }}
+                      >
+                        {profile.full_name?.charAt(0) || "?"}
+                      </div>
+                    )}
                     <div>
                       <div
                         style={{
@@ -789,6 +834,12 @@ export const JobProfiles = () => {
                       >
                         {profile.headline || "Job Seeker"}
                       </div>
+                      {profile.user_mobile && (
+                        <div style={{ display: "flex", alignItems: "center", gap: "4px", fontSize: "11px", color: theme.colors.textSecondary, marginTop: "4px" }}>
+                          <PhoneCall size={12} />
+                          {profile.user_mobile}
+                        </div>
+                      )}
                     </div>
                   </div>
                   <span
