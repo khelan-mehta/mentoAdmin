@@ -1,5 +1,5 @@
 use crate::db::DbConn;
-use crate::models::{CategoryResponse, MainCategory, SubCategory, SubCategoryResponse, WorkerProfile, JobSeekerProfile, User};
+use crate::models::{CategoryResponse, MainCategory, SubCategory, SubCategoryResponse, WorkerProfile, JobSeekerProfile, User, Notification, NotificationResponse, NotificationType};
 use crate::utils::{ApiError, ApiResponse};
 use mongodb::bson::{doc, DateTime, oid::ObjectId};
 use mongodb::options::FindOptions;
@@ -989,5 +989,124 @@ pub async fn delete_worker(
 
     Ok(Json(ApiResponse::success(serde_json::json!({
         "message": "Worker profile deleted successfully"
+    }))))
+}
+
+// ==================== NOTIFICATION ADMIN ROUTES ====================
+
+#[derive(FromForm, serde::Deserialize, rocket_okapi::okapi::schemars::JsonSchema)]
+pub struct NotificationListQuery {
+    pub is_read: Option<bool>,
+    pub notification_type: Option<String>,
+    pub page: Option<i64>,
+    pub limit: Option<i64>,
+}
+
+#[openapi(tag = "Admin - Notifications")]
+#[get("/admin/notifications?<query..>")]
+pub async fn get_all_notifications(
+    db: &State<DbConn>,
+    query: NotificationListQuery,
+) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
+    let page = query.page.unwrap_or(1).max(1);
+    let limit = query.limit.unwrap_or(20).min(100);
+    let skip = (page - 1) * limit;
+
+    let mut filter = doc! {};
+    if let Some(is_read) = query.is_read {
+        filter.insert("is_read", is_read);
+    }
+    if let Some(ref notification_type) = query.notification_type {
+        filter.insert("notification_type", notification_type);
+    }
+
+    let find_options = FindOptions::builder()
+        .skip(skip as u64)
+        .limit(limit)
+        .sort(doc! { "created_at": -1 })
+        .build();
+
+    let mut cursor = db.collection::<Notification>("notifications")
+        .find(filter.clone(), find_options)
+        .await
+        .map_err(|e| ApiError::internal_error(format!("Database error: {}", e)))?;
+
+    let mut notifications = Vec::new();
+    while cursor.advance().await.map_err(|e| ApiError::internal_error(format!("Cursor error: {}", e)))? {
+        let notification = cursor.deserialize_current()
+            .map_err(|e| ApiError::internal_error(format!("Deserialization error: {}", e)))?;
+        notifications.push(NotificationResponse::from(notification));
+    }
+
+    let total = db.collection::<Notification>("notifications")
+        .count_documents(filter, None)
+        .await
+        .map_err(|e| ApiError::internal_error(format!("Count error: {}", e)))?;
+
+    Ok(Json(ApiResponse::success(serde_json::json!({
+        "notifications": notifications,
+        "pagination": {
+            "page": page,
+            "limit": limit,
+            "total": total,
+            "pages": (total as f64 / limit as f64).ceil() as i64,
+        }
+    }))))
+}
+
+#[openapi(tag = "Admin - Notifications")]
+#[get("/admin/notifications/unread-count")]
+pub async fn get_unread_notifications_count(
+    db: &State<DbConn>,
+) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
+    let count = db.collection::<Notification>("notifications")
+        .count_documents(doc! { "is_read": false }, None)
+        .await
+        .map_err(|e| ApiError::internal_error(format!("Database error: {}", e)))?;
+
+    Ok(Json(ApiResponse::success(serde_json::json!({
+        "unread_count": count
+    }))))
+}
+
+#[openapi(tag = "Admin - Notifications")]
+#[put("/admin/notifications/<notification_id>/read")]
+pub async fn mark_notification_read(
+    db: &State<DbConn>,
+    notification_id: String,
+) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
+    let object_id = ObjectId::parse_str(&notification_id)
+        .map_err(|_| ApiError::bad_request("Invalid notification ID"))?;
+
+    db.collection::<Notification>("notifications")
+        .update_one(
+            doc! { "_id": object_id },
+            doc! { "$set": { "is_read": true } },
+            None
+        )
+        .await
+        .map_err(|e| ApiError::internal_error(format!("Failed to update notification: {}", e)))?;
+
+    Ok(Json(ApiResponse::success(serde_json::json!({
+        "message": "Notification marked as read"
+    }))))
+}
+
+#[openapi(tag = "Admin - Notifications")]
+#[put("/admin/notifications/mark-all-read")]
+pub async fn mark_all_notifications_read(
+    db: &State<DbConn>,
+) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
+    let result = db.collection::<Notification>("notifications")
+        .update_many(
+            doc! { "is_read": false },
+            doc! { "$set": { "is_read": true } },
+            None
+        )
+        .await
+        .map_err(|e| ApiError::internal_error(format!("Failed to update notifications: {}", e)))?;
+
+    Ok(Json(ApiResponse::success(serde_json::json!({
+        "message": format!("{} notifications marked as read", result.modified_count)
     }))))
 }

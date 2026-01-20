@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import {
   Home,
   Users,
@@ -23,6 +23,7 @@ import {
   ChevronDown,
 } from "lucide-react";
 import logo from '../assets/image.png';
+import { Notifications } from './Notifications';
 // ==================== CONSTANTS ====================
 const theme = {
   colors: {
@@ -92,75 +93,78 @@ export const TopBar = ({
   notifications,
   setNotifications,
 }: any) => {
-  return (
-    <div
-      style={{
-        background: theme.colors.surface,
-        borderBottom: `1px solid ${theme.colors.border}`,
-        padding: "16px 24px",
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-      }}
-    >
-      <div style={{ position: "relative", flex: 1, maxWidth: "400px" }}>
-        <Search
-          size={20}
-          color={theme.colors.textSecondary}
-          style={{
-            position: "absolute",
-            left: "12px",
-            top: "50%",
-            transform: "translateY(-50%)",
-          }}
-        />
-        <input
-          type="text"
-          placeholder="Search..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          style={{
-            width: "100%",
-            padding: "10px 12px 10px 40px",
-            border: `1px solid ${theme.colors.border}`,
-            borderRadius: "8px",
-            fontSize: "14px",
-            outline: "none",
-          }}
-        />
-      </div>
+  const [showNotifications, setShowNotifications] = useState(false);
 
-      <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-        <button
-          onClick={() => setNotifications(0)}
-          style={{
-            width: "40px",
-            height: "40px",
-            borderRadius: "50%",
-            background: theme.colors.background,
-            border: "none",
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            position: "relative",
-          }}
-        >
-          <Bell size={20} color={theme.colors.text} />
-          {notifications > 0 && (
-            <span
-              style={{
-                position: "absolute",
-                top: "8px",
-                right: "8px",
-                width: "8px",
-                height: "8px",
-                borderRadius: "50%",
-                background: theme.colors.danger,
-              }}
-            />
-          )}
-        </button>
+  return (
+    <>
+      <div
+        style={{
+          background: theme.colors.surface,
+          borderBottom: `1px solid ${theme.colors.border}`,
+          padding: "16px 24px",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+        }}
+      >
+        <div style={{ position: "relative", flex: 1, maxWidth: "400px" }}>
+          <Search
+            size={20}
+            color={theme.colors.textSecondary}
+            style={{
+              position: "absolute",
+              left: "12px",
+              top: "50%",
+              transform: "translateY(-50%)",
+            }}
+          />
+          <input
+            type="text"
+            placeholder="Search..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            style={{
+              width: "100%",
+              padding: "10px 12px 10px 40px",
+              border: `1px solid ${theme.colors.border}`,
+              borderRadius: "8px",
+              fontSize: "14px",
+              outline: "none",
+            }}
+          />
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+          <button
+            onClick={() => setShowNotifications(!showNotifications)}
+            style={{
+              width: "40px",
+              height: "40px",
+              borderRadius: "50%",
+              background: theme.colors.background,
+              border: "none",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              position: "relative",
+            }}
+          >
+            <Bell size={20} color={theme.colors.text} />
+            {notifications > 0 && (
+              <span
+                style={{
+                  position: "absolute",
+                  top: "8px",
+                  right: "8px",
+                  width: "8px",
+                  height: "8px",
+                  borderRadius: "50%",
+                  background: theme.colors.danger,
+                }}
+              />
+            )}
+          </button>
 
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
           <div
@@ -199,5 +203,12 @@ export const TopBar = ({
         </div>
       </div>
     </div>
+
+      <Notifications
+        isOpen={showNotifications}
+        onClose={() => setShowNotifications(false)}
+        onNotificationCountChange={setNotifications}
+      />
+    </>
   );
 };

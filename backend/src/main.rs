@@ -186,6 +186,11 @@ fn rocket() -> Rocket<Build> {
                 routes::admin::get_worker_by_id,
                 routes::admin::update_worker,
                 routes::admin::delete_worker,
+                // Admin Routes - Notifications
+                routes::admin::get_all_notifications,
+                routes::admin::get_unread_notifications_count,
+                routes::admin::mark_notification_read,
+                routes::admin::mark_all_notifications_read,
             ],
         )
         .mount("/uploads", FileServer::from("uploads"))

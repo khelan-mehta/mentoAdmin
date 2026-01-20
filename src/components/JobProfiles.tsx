@@ -45,6 +45,33 @@ const API_BASE_URL = BASE_URL;
 const JobProfileDetailModal = ({ profile, onClose, onApprove, onReject, isLoading }: any) => {
   const [rejectionReason, setRejectionReason] = useState("");
   const [showRejectForm, setShowRejectForm] = useState(false);
+  const [userData, setUserData] = useState<any>(null);
+  const [loadingUser, setLoadingUser] = useState(false);
+
+  useEffect(() => {
+    const fetchUserData = async () => {
+      if (profile?.user_id) {
+        setLoadingUser(true);
+        try {
+          const response = await fetch(`${API_BASE_URL}/admin/users/${profile.user_id}`, {
+            headers: {
+              "Authorization": `Bearer ${localStorage.getItem("token") || ""}`,
+            },
+          });
+          if (response.ok) {
+            const data = await response.json();
+            setUserData(data.data);
+          }
+        } catch (error) {
+          console.error("Error fetching user data:", error);
+        } finally {
+          setLoadingUser(false);
+        }
+      }
+    };
+
+    fetchUserData();
+  }, [profile?.user_id]);
 
   if (!profile) return null;
 
@@ -136,9 +163,23 @@ const JobProfileDetailModal = ({ profile, onClose, onApprove, onReject, isLoadin
           {/* Header */}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "24px" }}>
             <div style={{ display: "flex", gap: "16px", alignItems: "flex-start" }}>
-              {profile.user_photo ? (
+              {loadingUser ? (
+                <div
+                  style={{
+                    width: "64px",
+                    height: "64px",
+                    borderRadius: "50%",
+                    background: theme.colors.background,
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <Loader2 size={24} color={theme.colors.primary} className="animate-spin" />
+                </div>
+              ) : userData?.profile_photo ? (
                 <img
-                  src={profile.user_photo}
+                  src={userData.profile_photo}
                   alt={profile.full_name}
                   style={{
                     width: "64px",
@@ -178,16 +219,16 @@ const JobProfileDetailModal = ({ profile, onClose, onApprove, onReject, isLoadin
                 </p>
                 {/* Contact Information */}
                 <div style={{ marginTop: "8px", display: "flex", flexDirection: "column", gap: "4px" }}>
-                  {profile.user_mobile && (
+                  {userData?.mobile && (
                     <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", color: theme.colors.textSecondary }}>
                       <PhoneCall size={14} />
-                      {profile.user_mobile}
+                      {userData.mobile}
                     </div>
                   )}
-                  {profile.user_email && (
+                  {userData?.email && (
                     <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", color: theme.colors.textSecondary }}>
                       <Mail size={14} />
-                      {profile.user_email}
+                      {userData.email}
                     </div>
                   )}
                 </div>

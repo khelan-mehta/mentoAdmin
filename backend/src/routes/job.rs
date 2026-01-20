@@ -5,7 +5,7 @@ use rocket_okapi::openapi;
 use mongodb::bson::{doc, DateTime};
 use mongodb::options::FindOptions;
 use crate::db::DbConn;
-use crate::models::{Subscription, JobSeekerSubscriptionPlan, SubscriptionType, SubscriptionStatus, JobSeekerProfile, CreateJobSeekerProfileDto, UpdateJobSeekerProfileDto};
+use crate::models::{Subscription, JobSeekerSubscriptionPlan, SubscriptionType, SubscriptionStatus, JobSeekerProfile, CreateJobSeekerProfileDto, UpdateJobSeekerProfileDto, Notification, NotificationType};
 use crate::guards::{AuthGuard, KycGuard};
 use crate::utils::{ApiResponse, ApiError};
 use crate::services::RazorpayService;
@@ -326,6 +326,24 @@ pub async fn create_job_seeker_profile(
         .insert_one(&profile, None)
         .await
         .map_err(|e| ApiError::internal_error(format!("Failed to create profile: {}", e)))?;
+
+    let profile_id = result.inserted_id.as_object_id().unwrap();
+
+    // Create notification for new job seeker
+    let notification = Notification {
+        id: None,
+        notification_type: NotificationType::NewJobSeeker,
+        title: "New Job Seeker Registration".to_string(),
+        message: format!("A new job seeker '{}' has registered with skills: {}", dto.full_name, dto.skills.join(", ")),
+        reference_id: profile_id,
+        reference_type: "job_seeker".to_string(),
+        is_read: false,
+        created_at: DateTime::now(),
+    };
+
+    let _ = db.collection::<Notification>("notifications")
+        .insert_one(&notification, None)
+        .await;
 
     Ok(Json(ApiResponse::success_with_message(
         "Job seeker profile created successfully".to_string(),

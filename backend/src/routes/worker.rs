@@ -5,7 +5,7 @@ use rocket_okapi::openapi;
 use mongodb::bson::{doc, DateTime};
 use mongodb::options::FindOptions;
 use crate::db::DbConn;
-use crate::models::{CreateWorkerProfileDto, Subscription, WorkerSubscriptionPlan, UpdateWorkerProfileDto, WorkerProfile, SubscriptionType, SubscriptionStatus, NearbyWorkerQuery, GeoLocation, UpdateLocationDto};
+use crate::models::{CreateWorkerProfileDto, Subscription, WorkerSubscriptionPlan, UpdateWorkerProfileDto, WorkerProfile, SubscriptionType, SubscriptionStatus, NearbyWorkerQuery, GeoLocation, UpdateLocationDto, Notification, NotificationType};
 use crate::guards::{AuthGuard, KycGuard};
 use crate::utils::{ApiResponse, ApiError};
 use hmac::{Hmac, Mac};
@@ -293,7 +293,25 @@ pub async fn create_worker_profile(
         .insert_one(&worker, None)
         .await
         .map_err(|e| ApiError::internal_error(format!("Failed to create profile: {}", e)))?;
-    
+
+    let worker_id = result.inserted_id.as_object_id().unwrap();
+
+    // Create notification for new worker
+    let notification = Notification {
+        id: None,
+        notification_type: NotificationType::NewWorker,
+        title: "New Worker Registration".to_string(),
+        message: format!("A new worker has registered in categories: {}", dto.categories.join(", ")),
+        reference_id: worker_id,
+        reference_type: "worker".to_string(),
+        is_read: false,
+        created_at: DateTime::now(),
+    };
+
+    let _ = db.collection::<Notification>("notifications")
+        .insert_one(&notification, None)
+        .await;
+
     Ok(Json(ApiResponse::success_with_message(
         "Worker profile created successfully".to_string(),
         serde_json::json!({

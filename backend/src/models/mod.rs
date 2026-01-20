@@ -7,6 +7,7 @@ pub mod category;
 pub mod subscription;
 pub mod review;
 pub mod service;
+pub mod notification;
 
 pub use user::*;
 pub use otp::*;
@@ -17,3 +18,4 @@ pub use category::*;
 pub use subscription::*;
 pub use review::*;
 pub use service::*;
+pub use notification::*;
