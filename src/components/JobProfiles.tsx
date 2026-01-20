@@ -584,7 +584,37 @@ export const JobProfiles = () => {
       });
       if (response.ok) {
         const data = await response.json();
-        setJobProfiles(data.data?.profiles || []);
+        const profiles = data.data?.profiles || [];
+
+        // Fetch user data for each profile to get contact number and profile pic
+        const profilesWithUserData = await Promise.all(
+          profiles.map(async (profile: any) => {
+            try {
+              const userResponse = await fetch(
+                `${API_BASE_URL}/admin/users/${profile.user_id?.$oid || profile.user_id}`,
+                {
+                  headers: {
+                    "Authorization": `Bearer ${localStorage.getItem("token") || ""}`,
+                  },
+                }
+              );
+              if (userResponse.ok) {
+                const userData = await userResponse.json();
+                return {
+                  ...profile,
+                  user_mobile: userData.data?.user?.mobile,
+                  user_photo: userData.data?.user?.profile_photo,
+                  user_email: userData.data?.user?.email,
+                };
+              }
+            } catch (err) {
+              console.error("Error fetching user data:", err);
+            }
+            return profile;
+          })
+        );
+
+        setJobProfiles(profilesWithUserData);
       }
     } catch (error) {
       console.error("Error fetching job profiles:", error);

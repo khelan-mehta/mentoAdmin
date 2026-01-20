@@ -10,6 +10,7 @@ import {
   CreditCard,
   ShieldCheck,
   UserCog,
+  Bell,
 } from "lucide-react";
 import logo from "../assets/image.png";
 // ==================== CONSTANTS ====================
@@ -44,6 +45,7 @@ export const Sidebar = ({
     { id: "jobs", label: "Jobs", icon: ClipboardList },
     { id: "subscriptions", label: "Subscriptions", icon: CreditCard },
     { id: "services", label: "Services", icon: FolderTree },
+    { id: "notifications", label: "Notifications", icon: Bell },
   ];
 
   return (

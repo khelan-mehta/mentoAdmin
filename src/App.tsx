@@ -13,6 +13,7 @@ import { Jobs } from "./components/Jobs";
 import { Subscriptions } from "./components/Subscriptions";
 import { Services } from "./components/Services";
 import { SettingsPage } from "./components/SettingsPage";
+import { Notifications } from "./components/Notifications";
 
 // ==================== LOGIN COMPONENT ====================
 const LoginPage = ({ onLogin }: any) => {
@@ -361,6 +362,8 @@ const AdminPanel = () => {
           {activeTab === "subscriptions" && <Subscriptions />}
 
           {activeTab === "services" && <Services />}
+
+          {activeTab === "notifications" && <Notifications />}
 
           {activeTab === "settings" && <SettingsPage />}
         </div>
