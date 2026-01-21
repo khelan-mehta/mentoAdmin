@@ -17,6 +17,10 @@ import {
   Star,
   Building,
   Calendar,
+  PhoneCall,
+  Mail,
+  Shield,
+  Hash,
 } from "lucide-react";
 
 // ==================== CONSTANTS ====================
@@ -39,8 +43,35 @@ const theme = {
 import { BASE_URL } from "./Constants";
 const API_BASE_URL = BASE_URL;
 
+// Helper function to construct full profile photo URL
+const getProfilePhotoUrl = (photoPath: string | null | undefined) => {
+  if (!photoPath) return null;
+  if (photoPath.startsWith("http")) return photoPath;
+  return `${API_BASE_URL}${photoPath}`;
+};
+
+// Helper function to get KYC status color
+const getKycStatusColor = (status: string) => {
+  switch (status) {
+    case "approved":
+      return { bg: "#D1FAE5", color: theme.colors.success };
+    case "pending":
+      return { bg: "#FEF3C7", color: theme.colors.warning };
+    case "rejected":
+      return { bg: "#FEE2E2", color: theme.colors.danger };
+    default:
+      return { bg: theme.colors.border, color: theme.colors.textSecondary };
+  }
+};
+
 // ==================== JOB PROFILE DETAIL MODAL ====================
-const JobProfileDetailModal = ({ profile, onClose, onApprove, onReject, isLoading }: any) => {
+const JobProfileDetailModal = ({
+  profile,
+  onClose,
+  onApprove,
+  onReject,
+  isLoading,
+}: any) => {
   const [rejectionReason, setRejectionReason] = useState("");
   const [showRejectForm, setShowRejectForm] = useState(false);
 
@@ -75,6 +106,46 @@ const JobProfileDetailModal = ({ profile, onClose, onApprove, onReject, isLoadin
       </span>
     );
   };
+
+  const getKycStatusBadge = (status: string) => {
+    const statusConfig: Record<
+      string,
+      { bg: string; color: string; label: string }
+    > = {
+      approved: {
+        bg: "#D1FAE5",
+        color: theme.colors.success,
+        label: "KYC Approved",
+      },
+      pending: {
+        bg: "#FEF3C7",
+        color: theme.colors.warning,
+        label: "KYC Pending",
+      },
+      rejected: {
+        bg: "#FEE2E2",
+        color: theme.colors.danger,
+        label: "KYC Rejected",
+      },
+    };
+    const config = statusConfig[status] || statusConfig.pending;
+    return (
+      <span
+        style={{
+          padding: "4px 10px",
+          borderRadius: "16px",
+          fontSize: "11px",
+          fontWeight: "600",
+          background: config.bg,
+          color: config.color,
+        }}
+      >
+        {config.label}
+      </span>
+    );
+  };
+
+  const profilePhotoUrl = getProfilePhotoUrl(profile.user_photo);
 
   return (
     <div
@@ -114,7 +185,14 @@ const JobProfileDetailModal = ({ profile, onClose, onApprove, onReject, isLoadin
             zIndex: 10,
           }}
         >
-          <h2 style={{ margin: 0, fontSize: "18px", fontWeight: "700", color: theme.colors.text }}>
+          <h2
+            style={{
+              margin: 0,
+              fontSize: "18px",
+              fontWeight: "700",
+              color: theme.colors.text,
+            }}
+          >
             Job Seeker Profile
           </h2>
           <button
@@ -132,46 +210,189 @@ const JobProfileDetailModal = ({ profile, onClose, onApprove, onReject, isLoadin
 
         <div style={{ padding: "24px" }}>
           {/* Header */}
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "24px" }}>
-            <div style={{ display: "flex", gap: "16px", alignItems: "flex-start" }}>
-              <div
-                style={{
-                  width: "64px",
-                  height: "64px",
-                  borderRadius: "50%",
-                  background: theme.colors.primary,
-                  color: "white",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: "24px",
-                  fontWeight: "700",
-                }}
-              >
-                {profile.full_name?.charAt(0) || "?"}
-              </div>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "flex-start",
+              marginBottom: "24px",
+            }}
+          >
+            <div
+              style={{ display: "flex", gap: "16px", alignItems: "flex-start" }}
+            >
+              {profilePhotoUrl ? (
+                <img
+                  src={profilePhotoUrl}
+                  alt={profile.full_name || profile.user_name}
+                  style={{
+                    width: "80px",
+                    height: "80px",
+                    borderRadius: "50%",
+                    objectFit: "cover",
+                    border: `3px solid ${theme.colors.border}`,
+                  }}
+                />
+              ) : (
+                <div
+                  style={{
+                    width: "80px",
+                    height: "80px",
+                    borderRadius: "50%",
+                    background: theme.colors.primary,
+                    color: "white",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: "28px",
+                    fontWeight: "700",
+                  }}
+                >
+                  {(profile.full_name || profile.user_name)?.charAt(0) || "?"}
+                </div>
+              )}
               <div>
-                <h3 style={{ margin: 0, fontSize: "20px", fontWeight: "700", color: theme.colors.text }}>
-                  {profile.full_name}
+                <h3
+                  style={{
+                    margin: 0,
+                    fontSize: "20px",
+                    fontWeight: "700",
+                    color: theme.colors.text,
+                  }}
+                >
+                  {profile.full_name ||
+                    profile.user_name ||
+                    "Name not provided"}
                 </h3>
-                <p style={{ margin: "4px 0 0", color: theme.colors.primary, fontSize: "14px", fontWeight: "500" }}>
+                <p
+                  style={{
+                    margin: "4px 0 0",
+                    color: theme.colors.primary,
+                    fontSize: "14px",
+                    fontWeight: "500",
+                  }}
+                >
                   {profile.headline || "Job Seeker"}
                 </p>
-                <p style={{ margin: "4px 0 0", color: theme.colors.textSecondary, fontSize: "13px" }}>
-                  {profile.experience_years ? `${profile.experience_years} years experience` : "Experience not specified"}
+                <p
+                  style={{
+                    margin: "4px 0 0",
+                    color: theme.colors.textSecondary,
+                    fontSize: "13px",
+                  }}
+                >
+                  {profile.experience_years
+                    ? `${profile.experience_years} years experience`
+                    : "Experience not specified"}
                 </p>
+                {/* Contact Information */}
+                <div
+                  style={{
+                    marginTop: "12px",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "6px",
+                  }}
+                >
+                  {profile.user_mobile && (
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        fontSize: "13px",
+                        color: theme.colors.textSecondary,
+                      }}
+                    >
+                      <PhoneCall size={14} color={theme.colors.primary} />
+                      <a
+                        href={`tel:${profile.user_mobile}`}
+                        style={{
+                          color: theme.colors.text,
+                          textDecoration: "none",
+                        }}
+                      >
+                        {profile.user_mobile}
+                      </a>
+                    </div>
+                  )}
+                  {profile.user_email && (
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        fontSize: "13px",
+                        color: theme.colors.textSecondary,
+                      }}
+                    >
+                      <Mail size={14} color={theme.colors.primary} />
+                      <a
+                        href={`mailto:${profile.user_email}`}
+                        style={{
+                          color: theme.colors.text,
+                          textDecoration: "none",
+                        }}
+                      >
+                        {profile.user_email}
+                      </a>
+                    </div>
+                  )}
+                  {(profile.user_city || profile.user_pincode) && (
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px",
+                        fontSize: "13px",
+                        color: theme.colors.textSecondary,
+                      }}
+                    >
+                      <MapPin size={14} color={theme.colors.primary} />
+                      <span style={{ color: theme.colors.text }}>
+                        {[profile.user_city, profile.user_pincode]
+                          .filter(Boolean)
+                          .join(" - ")}
+                      </span>
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
-            {getStatusBadge(profile.is_verified)}
+            <div
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: "8px",
+                alignItems: "flex-end",
+              }}
+            >
+              {getStatusBadge(profile.is_verified)}
+              {profile.user_kyc_status &&
+                getKycStatusBadge(profile.user_kyc_status)}
+            </div>
           </div>
 
           {/* Bio */}
           {profile.bio && (
             <div style={{ marginBottom: "24px" }}>
-              <h4 style={{ margin: "0 0 8px", fontSize: "14px", fontWeight: "600", color: theme.colors.text }}>
+              <h4
+                style={{
+                  margin: "0 0 8px",
+                  fontSize: "14px",
+                  fontWeight: "600",
+                  color: theme.colors.text,
+                }}
+              >
                 About
               </h4>
-              <p style={{ margin: 0, color: theme.colors.textSecondary, lineHeight: "1.6" }}>
+              <p
+                style={{
+                  margin: 0,
+                  color: theme.colors.textSecondary,
+                  lineHeight: "1.6",
+                }}
+              >
                 {profile.bio}
               </p>
             </div>
@@ -186,57 +407,247 @@ const JobProfileDetailModal = ({ profile, onClose, onApprove, onReject, isLoadin
               marginBottom: "24px",
             }}
           >
-            <div style={{ padding: "16px", background: theme.colors.background, borderRadius: "8px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+            <div
+              style={{
+                padding: "16px",
+                background: theme.colors.background,
+                borderRadius: "8px",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  marginBottom: "8px",
+                }}
+              >
                 <DollarSign size={16} color={theme.colors.textSecondary} />
-                <span style={{ fontSize: "12px", color: theme.colors.textSecondary }}>Expected Salary</span>
+                <span
+                  style={{
+                    fontSize: "12px",
+                    color: theme.colors.textSecondary,
+                  }}
+                >
+                  Expected Salary
+                </span>
               </div>
-              <p style={{ margin: 0, fontWeight: "600", color: theme.colors.text }}>
+              <p
+                style={{
+                  margin: 0,
+                  fontWeight: "600",
+                  color: theme.colors.text,
+                }}
+              >
                 {profile.expected_salary_min && profile.expected_salary_max
                   ? `₹${profile.expected_salary_min.toLocaleString()} - ₹${profile.expected_salary_max.toLocaleString()}`
                   : "Not specified"}
               </p>
             </div>
 
-            <div style={{ padding: "16px", background: theme.colors.background, borderRadius: "8px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+            <div
+              style={{
+                padding: "16px",
+                background: theme.colors.background,
+                borderRadius: "8px",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  marginBottom: "8px",
+                }}
+              >
                 <MapPin size={16} color={theme.colors.textSecondary} />
-                <span style={{ fontSize: "12px", color: theme.colors.textSecondary }}>Preferred Locations</span>
+                <span
+                  style={{
+                    fontSize: "12px",
+                    color: theme.colors.textSecondary,
+                  }}
+                >
+                  Preferred Locations
+                </span>
               </div>
-              <p style={{ margin: 0, fontWeight: "600", color: theme.colors.text }}>
+              <p
+                style={{
+                  margin: 0,
+                  fontWeight: "600",
+                  color: theme.colors.text,
+                }}
+              >
                 {profile.preferred_locations?.length > 0
                   ? profile.preferred_locations.join(", ")
                   : "Not specified"}
               </p>
             </div>
 
-            <div style={{ padding: "16px", background: theme.colors.background, borderRadius: "8px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+            <div
+              style={{
+                padding: "16px",
+                background: theme.colors.background,
+                borderRadius: "8px",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  marginBottom: "8px",
+                }}
+              >
                 <Briefcase size={16} color={theme.colors.textSecondary} />
-                <span style={{ fontSize: "12px", color: theme.colors.textSecondary }}>Job Types</span>
+                <span
+                  style={{
+                    fontSize: "12px",
+                    color: theme.colors.textSecondary,
+                  }}
+                >
+                  Job Types
+                </span>
               </div>
-              <p style={{ margin: 0, fontWeight: "600", color: theme.colors.text, textTransform: "capitalize" }}>
+              <p
+                style={{
+                  margin: 0,
+                  fontWeight: "600",
+                  color: theme.colors.text,
+                  textTransform: "capitalize",
+                }}
+              >
                 {profile.preferred_job_types?.length > 0
                   ? profile.preferred_job_types.join(", ")
                   : "Not specified"}
               </p>
             </div>
 
-            <div style={{ padding: "16px", background: theme.colors.background, borderRadius: "8px" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+            <div
+              style={{
+                padding: "16px",
+                background: theme.colors.background,
+                borderRadius: "8px",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                  marginBottom: "8px",
+                }}
+              >
                 <Star size={16} color={theme.colors.textSecondary} />
-                <span style={{ fontSize: "12px", color: theme.colors.textSecondary }}>Subscription</span>
+                <span
+                  style={{
+                    fontSize: "12px",
+                    color: theme.colors.textSecondary,
+                  }}
+                >
+                  Subscription
+                </span>
               </div>
-              <p style={{ margin: 0, fontWeight: "600", color: theme.colors.text, textTransform: "capitalize" }}>
+              <p
+                style={{
+                  margin: 0,
+                  fontWeight: "600",
+                  color: theme.colors.text,
+                  textTransform: "capitalize",
+                }}
+              >
                 {profile.subscription_plan || "None"}
               </p>
             </div>
+
+            {profile.user_kyc_status && (
+              <div
+                style={{
+                  padding: "16px",
+                  background: theme.colors.background,
+                  borderRadius: "8px",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    marginBottom: "8px",
+                  }}
+                >
+                  <Shield size={16} color={theme.colors.textSecondary} />
+                  <span
+                    style={{
+                      fontSize: "12px",
+                      color: theme.colors.textSecondary,
+                    }}
+                  >
+                    KYC Status
+                  </span>
+                </div>
+                <p
+                  style={{
+                    margin: 0,
+                    fontWeight: "600",
+                    color: theme.colors.text,
+                    textTransform: "capitalize",
+                  }}
+                >
+                  {profile.user_kyc_status}
+                </p>
+              </div>
+            )}
+
+            {profile.user_pincode && (
+              <div
+                style={{
+                  padding: "16px",
+                  background: theme.colors.background,
+                  borderRadius: "8px",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    marginBottom: "8px",
+                  }}
+                >
+                  <Hash size={16} color={theme.colors.textSecondary} />
+                  <span
+                    style={{
+                      fontSize: "12px",
+                      color: theme.colors.textSecondary,
+                    }}
+                  >
+                    Pincode
+                  </span>
+                </div>
+                <p
+                  style={{
+                    margin: 0,
+                    fontWeight: "600",
+                    color: theme.colors.text,
+                  }}
+                >
+                  {profile.user_pincode}
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Skills */}
           {profile.skills && profile.skills.length > 0 && (
             <div style={{ marginBottom: "24px" }}>
-              <h4 style={{ margin: "0 0 12px", fontSize: "14px", fontWeight: "600", color: theme.colors.text }}>
+              <h4
+                style={{
+                  margin: "0 0 12px",
+                  fontSize: "14px",
+                  fontWeight: "600",
+                  color: theme.colors.text,
+                }}
+              >
                 Skills
               </h4>
               <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
@@ -262,11 +673,27 @@ const JobProfileDetailModal = ({ profile, onClose, onApprove, onReject, isLoadin
           {/* Education */}
           {profile.education && profile.education.length > 0 && (
             <div style={{ marginBottom: "24px" }}>
-              <h4 style={{ margin: "0 0 12px", fontSize: "14px", fontWeight: "600", color: theme.colors.text, display: "flex", alignItems: "center", gap: "8px" }}>
+              <h4
+                style={{
+                  margin: "0 0 12px",
+                  fontSize: "14px",
+                  fontWeight: "600",
+                  color: theme.colors.text,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                }}
+              >
                 <GraduationCap size={16} />
                 Education
               </h4>
-              <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "12px",
+                }}
+              >
                 {profile.education.map((edu: any, index: number) => (
                   <div
                     key={index}
@@ -276,17 +703,44 @@ const JobProfileDetailModal = ({ profile, onClose, onApprove, onReject, isLoadin
                       borderRadius: "8px",
                     }}
                   >
-                    <p style={{ margin: 0, fontWeight: "600", color: theme.colors.text }}>{edu.degree}</p>
-                    <p style={{ margin: "4px 0 0", color: theme.colors.textSecondary, fontSize: "14px" }}>
+                    <p
+                      style={{
+                        margin: 0,
+                        fontWeight: "600",
+                        color: theme.colors.text,
+                      }}
+                    >
+                      {edu.degree}
+                    </p>
+                    <p
+                      style={{
+                        margin: "4px 0 0",
+                        color: theme.colors.textSecondary,
+                        fontSize: "14px",
+                      }}
+                    >
                       {edu.institution}
                     </p>
                     {edu.field_of_study && (
-                      <p style={{ margin: "4px 0 0", color: theme.colors.textSecondary, fontSize: "13px" }}>
+                      <p
+                        style={{
+                          margin: "4px 0 0",
+                          color: theme.colors.textSecondary,
+                          fontSize: "13px",
+                        }}
+                      >
                         {edu.field_of_study}
                       </p>
                     )}
-                    <p style={{ margin: "4px 0 0", color: theme.colors.textSecondary, fontSize: "12px" }}>
-                      {edu.start_year} - {edu.is_current ? "Present" : edu.end_year}
+                    <p
+                      style={{
+                        margin: "4px 0 0",
+                        color: theme.colors.textSecondary,
+                        fontSize: "12px",
+                      }}
+                    >
+                      {edu.start_year} -{" "}
+                      {edu.is_current ? "Present" : edu.end_year}
                     </p>
                   </div>
                 ))}
@@ -297,11 +751,27 @@ const JobProfileDetailModal = ({ profile, onClose, onApprove, onReject, isLoadin
           {/* Work Experience */}
           {profile.work_experience && profile.work_experience.length > 0 && (
             <div style={{ marginBottom: "24px" }}>
-              <h4 style={{ margin: "0 0 12px", fontSize: "14px", fontWeight: "600", color: theme.colors.text, display: "flex", alignItems: "center", gap: "8px" }}>
+              <h4
+                style={{
+                  margin: "0 0 12px",
+                  fontSize: "14px",
+                  fontWeight: "600",
+                  color: theme.colors.text,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px",
+                }}
+              >
                 <Building size={16} />
                 Work Experience
               </h4>
-              <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "12px",
+                }}
+              >
                 {profile.work_experience.map((exp: any, index: number) => (
                   <div
                     key={index}
@@ -311,20 +781,54 @@ const JobProfileDetailModal = ({ profile, onClose, onApprove, onReject, isLoadin
                       borderRadius: "8px",
                     }}
                   >
-                    <p style={{ margin: 0, fontWeight: "600", color: theme.colors.text }}>{exp.title}</p>
-                    <p style={{ margin: "4px 0 0", color: theme.colors.primary, fontSize: "14px" }}>
+                    <p
+                      style={{
+                        margin: 0,
+                        fontWeight: "600",
+                        color: theme.colors.text,
+                      }}
+                    >
+                      {exp.title}
+                    </p>
+                    <p
+                      style={{
+                        margin: "4px 0 0",
+                        color: theme.colors.primary,
+                        fontSize: "14px",
+                      }}
+                    >
                       {exp.company}
                     </p>
                     {exp.location && (
-                      <p style={{ margin: "4px 0 0", color: theme.colors.textSecondary, fontSize: "13px" }}>
+                      <p
+                        style={{
+                          margin: "4px 0 0",
+                          color: theme.colors.textSecondary,
+                          fontSize: "13px",
+                        }}
+                      >
                         {exp.location}
                       </p>
                     )}
-                    <p style={{ margin: "4px 0 0", color: theme.colors.textSecondary, fontSize: "12px" }}>
-                      {exp.start_date} - {exp.is_current ? "Present" : exp.end_date}
+                    <p
+                      style={{
+                        margin: "4px 0 0",
+                        color: theme.colors.textSecondary,
+                        fontSize: "12px",
+                      }}
+                    >
+                      {exp.start_date} -{" "}
+                      {exp.is_current ? "Present" : exp.end_date}
                     </p>
                     {exp.description && (
-                      <p style={{ margin: "8px 0 0", color: theme.colors.textSecondary, fontSize: "13px", lineHeight: "1.5" }}>
+                      <p
+                        style={{
+                          margin: "8px 0 0",
+                          color: theme.colors.textSecondary,
+                          fontSize: "13px",
+                          lineHeight: "1.5",
+                        }}
+                      >
                         {exp.description}
                       </p>
                     )}
@@ -336,7 +840,17 @@ const JobProfileDetailModal = ({ profile, onClose, onApprove, onReject, isLoadin
 
           {/* Links */}
           <div style={{ marginBottom: "24px" }}>
-            <h4 style={{ margin: "0 0 12px", fontSize: "14px", fontWeight: "600", color: theme.colors.text, display: "flex", alignItems: "center", gap: "8px" }}>
+            <h4
+              style={{
+                margin: "0 0 12px",
+                fontSize: "14px",
+                fontWeight: "600",
+                color: theme.colors.text,
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+              }}
+            >
               <LinkIcon size={16} />
               Links
             </h4>
@@ -415,10 +929,22 @@ const JobProfileDetailModal = ({ profile, onClose, onApprove, onReject, isLoadin
 
           {/* Action Buttons */}
           {!profile.is_verified && (
-            <div style={{ borderTop: `1px solid ${theme.colors.border}`, paddingTop: "20px" }}>
+            <div
+              style={{
+                borderTop: `1px solid ${theme.colors.border}`,
+                paddingTop: "20px",
+              }}
+            >
               {showRejectForm ? (
                 <div>
-                  <label style={{ display: "block", marginBottom: "8px", fontSize: "14px", fontWeight: "600" }}>
+                  <label
+                    style={{
+                      display: "block",
+                      marginBottom: "8px",
+                      fontSize: "14px",
+                      fontWeight: "600",
+                    }}
+                  >
                     Rejection Reason
                   </label>
                   <textarea
@@ -436,7 +962,9 @@ const JobProfileDetailModal = ({ profile, onClose, onApprove, onReject, isLoadin
                       boxSizing: "border-box",
                     }}
                   />
-                  <div style={{ display: "flex", gap: "12px", marginTop: "12px" }}>
+                  <div
+                    style={{ display: "flex", gap: "12px", marginTop: "12px" }}
+                  >
                     <button
                       onClick={() => setShowRejectForm(false)}
                       style={{
@@ -453,7 +981,12 @@ const JobProfileDetailModal = ({ profile, onClose, onApprove, onReject, isLoadin
                       Cancel
                     </button>
                     <button
-                      onClick={() => onReject(profile.id || profile._id?.$oid, rejectionReason)}
+                      onClick={() =>
+                        onReject(
+                          profile.id || profile._id?.$oid,
+                          rejectionReason,
+                        )
+                      }
                       disabled={!rejectionReason.trim() || isLoading}
                       style={{
                         flex: 1,
@@ -464,7 +997,10 @@ const JobProfileDetailModal = ({ profile, onClose, onApprove, onReject, isLoadin
                         borderRadius: "8px",
                         fontSize: "14px",
                         fontWeight: "600",
-                        cursor: rejectionReason.trim() && !isLoading ? "pointer" : "not-allowed",
+                        cursor:
+                          rejectionReason.trim() && !isLoading
+                            ? "pointer"
+                            : "not-allowed",
                         opacity: rejectionReason.trim() && !isLoading ? 1 : 0.6,
                         display: "flex",
                         alignItems: "center",
@@ -472,7 +1008,14 @@ const JobProfileDetailModal = ({ profile, onClose, onApprove, onReject, isLoadin
                         gap: "8px",
                       }}
                     >
-                      {isLoading ? <Loader2 size={16} style={{ animation: "spin 1s linear infinite" }} /> : <XCircle size={16} />}
+                      {isLoading ? (
+                        <Loader2
+                          size={16}
+                          style={{ animation: "spin 1s linear infinite" }}
+                        />
+                      ) : (
+                        <XCircle size={16} />
+                      )}
                       Confirm Reject
                     </button>
                   </div>
@@ -520,7 +1063,14 @@ const JobProfileDetailModal = ({ profile, onClose, onApprove, onReject, isLoadin
                       gap: "8px",
                     }}
                   >
-                    {isLoading ? <Loader2 size={16} style={{ animation: "spin 1s linear infinite" }} /> : <CheckCircle size={16} />}
+                    {isLoading ? (
+                      <Loader2
+                        size={16}
+                        style={{ animation: "spin 1s linear infinite" }}
+                      />
+                    ) : (
+                      <CheckCircle size={16} />
+                    )}
                     Approve Profile
                   </button>
                 </div>
@@ -539,7 +1089,9 @@ export const JobProfiles = () => {
   const [jobProfiles, setJobProfiles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
-  const [activeView, setActiveView] = useState<"all" | "pending" | "verified">("all");
+  const [activeView, setActiveView] = useState<"all" | "pending" | "verified">(
+    "all",
+  );
   const [selectedProfile, setSelectedProfile] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -548,12 +1100,48 @@ export const JobProfiles = () => {
       setLoading(true);
       const response = await fetch(`${API_BASE_URL}/admin/job-seekers`, {
         headers: {
-          "Authorization": `Bearer ${localStorage.getItem("token") || ""}`,
+          Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
         },
       });
       if (response.ok) {
         const data = await response.json();
-        setJobProfiles(data.data?.profiles || []);
+        const profiles = data.data?.profiles || [];
+
+        // Fetch user data for each profile to get contact number and profile pic
+        const profilesWithUserData = await Promise.all(
+          profiles.map(async (profile: any) => {
+            try {
+              const userResponse = await fetch(
+                `${API_BASE_URL}/admin/users/${profile.user_id?.$oid || profile.user_id}`,
+                {
+                  headers: {
+                    Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+                  },
+                },
+              );
+              if (userResponse.ok) {
+                const userData = await userResponse.json();
+                // Handle both possible response structures
+                const user = userData.data?.user || userData.data;
+                return {
+                  ...profile,
+                  user_mobile: user?.mobile,
+                  user_photo: user?.profile_photo,
+                  user_email: user?.email,
+                  user_name: user?.name,
+                  user_city: user?.city,
+                  user_pincode: user?.pincode,
+                  user_kyc_status: user?.kyc_status,
+                };
+              }
+            } catch (err) {
+              console.error("Error fetching user data:", err);
+            }
+            return profile;
+          }),
+        );
+
+        setJobProfiles(profilesWithUserData);
       }
     } catch (error) {
       console.error("Error fetching job profiles:", error);
@@ -569,14 +1157,17 @@ export const JobProfiles = () => {
   const handleApproveProfile = async (profileId: string) => {
     try {
       setActionLoading(true);
-      const response = await fetch(`${API_BASE_URL}/admin/job-seekers/${profileId}/verify`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${localStorage.getItem("token") || ""}`,
+      const response = await fetch(
+        `${API_BASE_URL}/admin/job-seekers/${profileId}/verify`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+          },
+          body: JSON.stringify({ is_verified: true }),
         },
-        body: JSON.stringify({ is_verified: true }),
-      });
+      );
       if (response.ok) {
         setSelectedProfile(null);
         fetchJobProfiles();
@@ -591,14 +1182,20 @@ export const JobProfiles = () => {
   const handleRejectProfile = async (profileId: string, reason: string) => {
     try {
       setActionLoading(true);
-      const response = await fetch(`${API_BASE_URL}/admin/job-seekers/${profileId}/verify`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${localStorage.getItem("token") || ""}`,
+      const response = await fetch(
+        `${API_BASE_URL}/admin/job-seekers/${profileId}/verify`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+          },
+          body: JSON.stringify({
+            is_verified: false,
+            rejection_reason: reason,
+          }),
         },
-        body: JSON.stringify({ is_verified: false, rejection_reason: reason }),
-      });
+      );
       if (response.ok) {
         setSelectedProfile(null);
         fetchJobProfiles();
@@ -613,8 +1210,14 @@ export const JobProfiles = () => {
   const filteredProfiles = jobProfiles.filter((profile) => {
     const matchesSearch =
       profile.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      profile.user_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       profile.headline?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      profile.skills?.some((skill: string) => skill.toLowerCase().includes(searchQuery.toLowerCase()));
+      profile.user_city?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      profile.user_email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      profile.user_mobile?.includes(searchQuery) ||
+      profile.skills?.some((skill: string) =>
+        skill.toLowerCase().includes(searchQuery.toLowerCase()),
+      );
 
     const matchesView =
       activeView === "all" ||
@@ -659,11 +1262,16 @@ export const JobProfiles = () => {
             <Search
               size={18}
               color={theme.colors.textSecondary}
-              style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)" }}
+              style={{
+                position: "absolute",
+                left: "12px",
+                top: "50%",
+                transform: "translateY(-50%)",
+              }}
             />
             <input
               type="text"
-              placeholder="Search by name, headline, or skill..."
+              placeholder="Search by name, email, phone, city..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               style={{
@@ -700,8 +1308,10 @@ export const JobProfiles = () => {
                 padding: "8px 16px",
                 borderRadius: "8px",
                 border: "none",
-                background: activeView === tab.key ? theme.colors.primary : "transparent",
-                color: activeView === tab.key ? "white" : theme.colors.textSecondary,
+                background:
+                  activeView === tab.key ? theme.colors.primary : "transparent",
+                color:
+                  activeView === tab.key ? "white" : theme.colors.textSecondary,
                 fontSize: "14px",
                 fontWeight: "600",
                 cursor: "pointer",
@@ -715,16 +1325,30 @@ export const JobProfiles = () => {
 
         {loading ? (
           <div style={{ textAlign: "center", padding: "40px" }}>
-            <Loader2 size={32} color={theme.colors.primary} style={{ animation: "spin 1s linear infinite" }} />
-            <p style={{ marginTop: "12px", color: theme.colors.textSecondary }}>Loading profiles...</p>
+            <Loader2
+              size={32}
+              color={theme.colors.primary}
+              style={{ animation: "spin 1s linear infinite" }}
+            />
+            <p style={{ marginTop: "12px", color: theme.colors.textSecondary }}>
+              Loading profiles...
+            </p>
             <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
           </div>
         ) : filteredProfiles.length === 0 ? (
           <div style={{ textAlign: "center", padding: "60px 20px" }}>
-            <User size={48} color={theme.colors.border} style={{ marginBottom: "16px" }} />
-            <h3 style={{ margin: "0 0 8px", color: theme.colors.text }}>No Job Profiles</h3>
+            <User
+              size={48}
+              color={theme.colors.border}
+              style={{ marginBottom: "16px" }}
+            />
+            <h3 style={{ margin: "0 0 8px", color: theme.colors.text }}>
+              No Job Profiles
+            </h3>
             <p style={{ margin: 0, color: theme.colors.textSecondary }}>
-              {searchQuery ? "No results match your search." : "There are no job seeker profiles to review."}
+              {searchQuery
+                ? "No results match your search."
+                : "There are no job seeker profiles to review."}
             </p>
           </div>
         ) : (
@@ -735,152 +1359,314 @@ export const JobProfiles = () => {
               gap: "20px",
             }}
           >
-            {filteredProfiles.map((profile: any, index: number) => (
-              <div
-                key={profile.id || profile._id?.$oid || index}
-                style={{
-                  background: theme.colors.background,
-                  borderRadius: "12px",
-                  padding: "20px",
-                  border: `1px solid ${theme.colors.border}`,
-                }}
-              >
+            {filteredProfiles.map((profile: any, index: number) => {
+              const profilePhotoUrl = getProfilePhotoUrl(profile.user_photo);
+              const kycColors = getKycStatusColor(profile.user_kyc_status);
+
+              return (
                 <div
+                  key={profile.id || profile._id?.$oid || index}
                   style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "flex-start",
-                    marginBottom: "16px",
+                    background: theme.colors.background,
+                    borderRadius: "12px",
+                    padding: "20px",
+                    border: `1px solid ${theme.colors.border}`,
                   }}
                 >
-                  <div style={{ display: "flex", gap: "12px" }}>
-                    <div
-                      style={{
-                        width: "48px",
-                        height: "48px",
-                        borderRadius: "50%",
-                        background: theme.colors.primary,
-                        color: "white",
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        fontSize: "18px",
-                        fontWeight: "700",
-                      }}
-                    >
-                      {profile.full_name?.charAt(0) || "?"}
-                    </div>
-                    <div>
-                      <div
-                        style={{
-                          fontSize: "16px",
-                          fontWeight: "700",
-                          color: theme.colors.text,
-                          marginBottom: "4px",
-                        }}
-                      >
-                        {profile.full_name}
-                      </div>
-                      <div
-                        style={{
-                          fontSize: "13px",
-                          color: theme.colors.primary,
-                        }}
-                      >
-                        {profile.headline || "Job Seeker"}
-                      </div>
-                    </div>
-                  </div>
-                  <span
+                  <div
                     style={{
-                      padding: "4px 10px",
-                      borderRadius: "20px",
-                      fontSize: "11px",
-                      fontWeight: "600",
-                      background: profile.is_verified ? "#D1FAE5" : "#FEF3C7",
-                      color: profile.is_verified ? theme.colors.success : theme.colors.warning,
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "flex-start",
+                      marginBottom: "16px",
                     }}
                   >
-                    {profile.is_verified ? "Verified" : "Pending"}
-                  </span>
-                </div>
-
-                <div style={{ marginBottom: "16px" }}>
-                  <div style={{ display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "12px" }}>
-                    {profile.skills?.slice(0, 3).map((skill: string, idx: number) => (
+                    <div style={{ display: "flex", gap: "12px" }}>
+                      {profilePhotoUrl ? (
+                        <img
+                          src={profilePhotoUrl}
+                          alt={profile.full_name || profile.user_name}
+                          style={{
+                            width: "56px",
+                            height: "56px",
+                            borderRadius: "50%",
+                            objectFit: "cover",
+                            border: `2px solid ${theme.colors.border}`,
+                          }}
+                        />
+                      ) : (
+                        <div
+                          style={{
+                            width: "56px",
+                            height: "56px",
+                            borderRadius: "50%",
+                            background: theme.colors.primary,
+                            color: "white",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            fontSize: "20px",
+                            fontWeight: "700",
+                          }}
+                        >
+                          {(profile.full_name || profile.user_name)?.charAt(
+                            0,
+                          ) || "?"}
+                        </div>
+                      )}
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div
+                          style={{
+                            fontSize: "16px",
+                            fontWeight: "700",
+                            color: theme.colors.text,
+                            marginBottom: "4px",
+                          }}
+                        >
+                          {profile.full_name ||
+                            profile.user_name ||
+                            "Name not provided"}
+                        </div>
+                        <div
+                          style={{
+                            fontSize: "13px",
+                            color: theme.colors.primary,
+                          }}
+                        >
+                          {profile.headline || "Job Seeker"}
+                        </div>
+                        {/* Contact info in card */}
+                        <div
+                          style={{
+                            marginTop: "8px",
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "4px",
+                          }}
+                        >
+                          {profile.user_mobile && (
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "4px",
+                                fontSize: "11px",
+                                color: theme.colors.textSecondary,
+                              }}
+                            >
+                              <PhoneCall size={12} />
+                              {profile.user_mobile}
+                            </div>
+                          )}
+                          {profile.user_email && (
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "4px",
+                                fontSize: "11px",
+                                color: theme.colors.textSecondary,
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                                maxWidth: "180px",
+                              }}
+                            >
+                              <Mail size={12} style={{ flexShrink: 0 }} />
+                              {profile.user_email}
+                            </div>
+                          )}
+                          {profile.user_city && (
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "4px",
+                                fontSize: "11px",
+                                color: theme.colors.textSecondary,
+                              }}
+                            >
+                              <MapPin size={12} />
+                              {profile.user_city}
+                              {profile.user_pincode
+                                ? ` - ${profile.user_pincode}`
+                                : ""}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: "4px",
+                        alignItems: "flex-end",
+                      }}
+                    >
                       <span
-                        key={idx}
                         style={{
                           padding: "4px 10px",
-                          background: `${theme.colors.primary}15`,
-                          color: theme.colors.primary,
-                          borderRadius: "12px",
-                          fontSize: "12px",
-                          fontWeight: "500",
+                          borderRadius: "20px",
+                          fontSize: "11px",
+                          fontWeight: "600",
+                          background: profile.is_verified
+                            ? "#D1FAE5"
+                            : "#FEF3C7",
+                          color: profile.is_verified
+                            ? theme.colors.success
+                            : theme.colors.warning,
                         }}
                       >
-                        {skill}
+                        {profile.is_verified ? "Verified" : "Pending"}
                       </span>
-                    ))}
-                    {profile.skills?.length > 3 && (
-                      <span
+                      {profile.user_kyc_status && (
+                        <span
+                          style={{
+                            padding: "3px 8px",
+                            borderRadius: "12px",
+                            fontSize: "10px",
+                            fontWeight: "600",
+                            background: kycColors.bg,
+                            color: kycColors.color,
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "3px",
+                          }}
+                        >
+                          <Shield size={10} />
+                          KYC {profile.user_kyc_status}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div style={{ marginBottom: "16px" }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        gap: "8px",
+                        flexWrap: "wrap",
+                        marginBottom: "12px",
+                      }}
+                    >
+                      {profile.skills
+                        ?.slice(0, 3)
+                        .map((skill: string, idx: number) => (
+                          <span
+                            key={idx}
+                            style={{
+                              padding: "4px 10px",
+                              background: `${theme.colors.primary}15`,
+                              color: theme.colors.primary,
+                              borderRadius: "12px",
+                              fontSize: "12px",
+                              fontWeight: "500",
+                            }}
+                          >
+                            {skill}
+                          </span>
+                        ))}
+                      {profile.skills?.length > 3 && (
+                        <span
+                          style={{
+                            padding: "4px 10px",
+                            background: theme.colors.border,
+                            color: theme.colors.textSecondary,
+                            borderRadius: "12px",
+                            fontSize: "12px",
+                            fontWeight: "500",
+                          }}
+                        >
+                          +{profile.skills.length - 3} more
+                        </span>
+                      )}
+                    </div>
+
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns: "1fr 1fr",
+                        gap: "8px",
+                      }}
+                    >
+                      <div
                         style={{
-                          padding: "4px 10px",
-                          background: theme.colors.border,
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          fontSize: "12px",
                           color: theme.colors.textSecondary,
-                          borderRadius: "12px",
-                          fontSize: "12px",
-                          fontWeight: "500",
                         }}
                       >
-                        +{profile.skills.length - 3} more
-                      </span>
-                    )}
+                        <Briefcase size={14} />
+                        {profile.experience_years
+                          ? `${profile.experience_years} yrs exp`
+                          : "N/A"}
+                      </div>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          fontSize: "12px",
+                          color: theme.colors.textSecondary,
+                        }}
+                      >
+                        <MapPin size={14} />
+                        {profile.preferred_locations?.[0] || "N/A"}
+                      </div>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          fontSize: "12px",
+                          color: theme.colors.textSecondary,
+                        }}
+                      >
+                        <Star size={14} />
+                        {profile.subscription_plan || "Free"}
+                      </div>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "6px",
+                          fontSize: "12px",
+                          color: theme.colors.textSecondary,
+                        }}
+                      >
+                        <Eye size={14} />
+                        {profile.profile_views || 0} views
+                      </div>
+                    </div>
                   </div>
 
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", color: theme.colors.textSecondary }}>
-                      <Briefcase size={14} />
-                      {profile.experience_years ? `${profile.experience_years} yrs exp` : "N/A"}
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", color: theme.colors.textSecondary }}>
-                      <MapPin size={14} />
-                      {profile.preferred_locations?.[0] || "N/A"}
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", color: theme.colors.textSecondary }}>
-                      <Star size={14} />
-                      {profile.subscription_plan || "Free"}
-                    </div>
-                    <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", color: theme.colors.textSecondary }}>
-                      <Eye size={14} />
-                      {profile.profile_views || 0} views
-                    </div>
-                  </div>
+                  <button
+                    onClick={() => setSelectedProfile(profile)}
+                    style={{
+                      width: "100%",
+                      padding: "10px",
+                      background: theme.colors.primary,
+                      color: "white",
+                      border: "none",
+                      borderRadius: "8px",
+                      fontSize: "13px",
+                      fontWeight: "600",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: "6px",
+                    }}
+                  >
+                    <Eye size={16} />
+                    View Full Profile
+                  </button>
                 </div>
-
-                <button
-                  onClick={() => setSelectedProfile(profile)}
-                  style={{
-                    width: "100%",
-                    padding: "10px",
-                    background: theme.colors.primary,
-                    color: "white",
-                    border: "none",
-                    borderRadius: "8px",
-                    fontSize: "13px",
-                    fontWeight: "600",
-                    cursor: "pointer",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    gap: "6px",
-                  }}
-                >
-                  <Eye size={16} />
-                  View Full Profile
-                </button>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

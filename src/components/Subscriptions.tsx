@@ -14,6 +14,7 @@ import {
   MapPin,
   Calendar,
   TrendingUp,
+  PhoneCall,
 } from "lucide-react";
 
 import { BASE_URL } from "./Constants";
@@ -135,6 +136,12 @@ const SubscriptionDetailModal = ({ subscription, onClose }: any) => {
                 <p style={{ margin: "4px 0 0", color: theme.colors.primary, fontSize: "14px", fontWeight: "500" }}>
                   {subscription.headline || subscription.category || "N/A"}
                 </p>
+                {subscription.user_mobile && (
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "8px", fontSize: "13px", color: theme.colors.textSecondary }}>
+                    <PhoneCall size={14} />
+                    {subscription.user_mobile}
+                  </div>
+                )}
                 <span
                   style={{
                     display: "inline-flex",
@@ -613,7 +620,7 @@ export const Subscriptions = () => {
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
                 <tr>
-                  {["User", "Type", "Plan", "Details", "Actions"].map((header) => (
+                  {["User", "Phone", "Type", "Plan", "Details", "Actions"].map((header) => (
                     <th
                       key={header}
                       style={{
@@ -669,6 +676,12 @@ export const Subscriptions = () => {
                             {sub.headline || sub.category || "N/A"}
                           </div>
                         </div>
+                      </div>
+                    </td>
+                    <td style={{ padding: "16px", color: theme.colors.textSecondary, fontSize: "13px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                        <PhoneCall size={14} />
+                        {sub.user_mobile || "N/A"}
                       </div>
                     </td>
                     <td style={{ padding: "16px" }}>

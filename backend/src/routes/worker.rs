@@ -345,11 +345,21 @@ pub async fn create_worker_profile(
         .insert_one(&worker, None)
         .await
         .map_err(|e| ApiError::internal_error(format!("Failed to create profile: {}", e)))?;
-    
+
+    // Create notification for new worker registration
+    let worker_id = result.inserted_id.as_object_id().unwrap();
+    let _ = crate::routes::notification::create_admin_notification(
+        db.inner(),
+        "new_worker".to_string(),
+        "New Worker Registered".to_string(),
+        format!("A new worker has registered and is pending verification."),
+        Some(worker_id),
+    ).await;
+
     Ok(Json(ApiResponse::success_with_message(
         "Worker profile created successfully".to_string(),
         serde_json::json!({
-            "worker_id": result.inserted_id.as_object_id().unwrap().to_hex()
+            "worker_id": worker_id.to_hex()
         })
     )))
 }

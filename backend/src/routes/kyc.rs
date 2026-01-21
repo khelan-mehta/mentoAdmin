@@ -5,7 +5,7 @@ use mongodb::bson::{doc, DateTime, oid::ObjectId};
 use mongodb::options::FindOptions;
 use crate::db::DbConn;
 use crate::guards::AuthGuard;
-use crate::models::{Kyc, SubmitKycDto, User, KycStatusEnum, KycStatus as UserKycStatus};
+use crate::models::{Kyc, SubmitKycDto, User, KycStatusEnum};
 use crate::utils::{ApiResponse, ApiError};
 
 #[derive(serde::Deserialize, rocket_okapi::okapi::schemars::JsonSchema)]

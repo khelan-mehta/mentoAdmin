@@ -331,10 +331,20 @@ pub async fn create_job_seeker_profile(
         .await
         .map_err(|e| ApiError::internal_error(format!("Failed to create profile: {}", e)))?;
 
+    // Create notification for new job seeker registration
+    let profile_id = result.inserted_id.as_object_id().unwrap();
+    let _ = crate::routes::notification::create_admin_notification(
+        db.inner(),
+        "new_job_seeker".to_string(),
+        "New Job Seeker Registered".to_string(),
+        format!("A new job seeker '{}' has registered and is pending verification.", dto.full_name),
+        Some(profile_id),
+    ).await;
+
     Ok(Json(ApiResponse::success_with_message(
         "Job seeker profile created successfully".to_string(),
         serde_json::json!({
-            "profile_id": result.inserted_id.as_object_id().unwrap().to_hex()
+            "profile_id": profile_id.to_hex()
         }),
     )))
 }

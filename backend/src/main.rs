@@ -183,6 +183,7 @@ fn rocket() -> Rocket<Build> {
                 routes::admin::delete_subcategory,
                 // Admin Routes - Jobs
                 routes::admin::get_all_jobs,
+                routes::admin::create_job,
                 routes::admin::update_job_status,
                 routes::admin::delete_job,
                 // Admin Routes - Users
@@ -194,6 +195,13 @@ fn rocket() -> Rocket<Build> {
                 routes::admin::get_worker_by_id,
                 routes::admin::update_worker,
                 routes::admin::delete_worker,
+                // Notification Routes
+                routes::notification::get_notifications,
+                routes::notification::mark_notification_read,
+                routes::notification::mark_all_notifications_read,
+                routes::notification::delete_notification,
+                routes::notification::get_unread_count,
+                routes::notification::create_notification,
             ],
         )
         .mount("/uploads", FileServer::from("uploads"))
