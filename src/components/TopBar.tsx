@@ -131,36 +131,7 @@ export const TopBar = ({
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-        <button
-          onClick={() => setNotifications(0)}
-          style={{
-            width: "40px",
-            height: "40px",
-            borderRadius: "50%",
-            background: theme.colors.background,
-            border: "none",
-            cursor: "pointer",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            position: "relative",
-          }}
-        >
-          <Bell size={20} color={theme.colors.text} />
-          {notifications > 0 && (
-            <span
-              style={{
-                position: "absolute",
-                top: "8px",
-                right: "8px",
-                width: "8px",
-                height: "8px",
-                borderRadius: "50%",
-                background: theme.colors.danger,
-              }}
-            />
-          )}
-        </button>
+      
 
         <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
           <div
