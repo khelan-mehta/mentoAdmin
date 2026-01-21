@@ -1,9 +1,8 @@
-use mongodb::bson::{doc, oid::ObjectId, DateTime as BsonDateTime};
+use crate::db::DbConn;
+use crate::models::{CreateNotificationDto, Notification, NotificationResponse};
+use mongodb::bson::{DateTime as BsonDateTime, doc, oid::ObjectId};
 use rocket::serde::json::Json;
 use rocket::{State, http::Status};
-use crate::db::DbConn;
-use crate::guards::auth::AuthGuard;
-use crate::models::{Notification, NotificationResponse, CreateNotificationDto};
 
 // Helper function to create a notification for all admins
 pub async fn create_admin_notification(
@@ -34,10 +33,9 @@ pub async fn create_admin_notification(
     Ok(())
 }
 
-// Get all notifications for the authenticated user
+// Get all notifications
 #[get("/notifications?<page>&<limit>&<is_read>")]
 pub async fn get_notifications(
-    _auth: AuthGuard,
     db: &State<DbConn>,
     page: Option<u64>,
     limit: Option<u64>,
@@ -66,14 +64,23 @@ pub async fn get_notifications(
 
     let mut notifications = Vec::new();
 
-    while cursor.advance().await.map_err(|_| Status::InternalServerError)? {
-        let notification = cursor.deserialize_current()
+    while cursor
+        .advance()
+        .await
+        .map_err(|_| Status::InternalServerError)?
+    {
+        let notification = cursor
+            .deserialize_current()
             .map_err(|_| Status::InternalServerError)?;
         notifications.push(NotificationResponse::from(notification));
     }
 
     // Sort by created_at descending
-    notifications.sort_by(|a, b| b.created_at.timestamp_millis().cmp(&a.created_at.timestamp_millis()));
+    notifications.sort_by(|a, b| {
+        b.created_at
+            .timestamp_millis()
+            .cmp(&a.created_at.timestamp_millis())
+    });
 
     // Apply pagination
     let paginated: Vec<NotificationResponse> = notifications
@@ -96,14 +103,13 @@ pub async fn get_notifications(
 // Mark notification as read
 #[put("/notifications/<notification_id>/read")]
 pub async fn mark_notification_read(
-    _auth: AuthGuard,
     db: &State<DbConn>,
     notification_id: String,
 ) -> Result<Json<serde_json::Value>, Status> {
-    let oid = ObjectId::parse_str(&notification_id)
-        .map_err(|_| Status::BadRequest)?;
+    let oid = ObjectId::parse_str(&notification_id).map_err(|_| Status::BadRequest)?;
 
-    let result = db.collection::<Notification>("notifications")
+    let result = db
+        .collection::<Notification>("notifications")
         .update_one(
             doc! { "_id": oid },
             doc! { "$set": { "is_read": true } },
@@ -125,10 +131,10 @@ pub async fn mark_notification_read(
 // Mark all notifications as read
 #[put("/notifications/read-all")]
 pub async fn mark_all_notifications_read(
-    _auth: AuthGuard,
     db: &State<DbConn>,
 ) -> Result<Json<serde_json::Value>, Status> {
-    let result = db.collection::<Notification>("notifications")
+    let result = db
+        .collection::<Notification>("notifications")
         .update_many(
             doc! { "is_read": false },
             doc! { "$set": { "is_read": true } },
@@ -146,14 +152,13 @@ pub async fn mark_all_notifications_read(
 // Delete a notification
 #[delete("/notifications/<notification_id>")]
 pub async fn delete_notification(
-    _auth: AuthGuard,
     db: &State<DbConn>,
     notification_id: String,
 ) -> Result<Json<serde_json::Value>, Status> {
-    let oid = ObjectId::parse_str(&notification_id)
-        .map_err(|_| Status::BadRequest)?;
+    let oid = ObjectId::parse_str(&notification_id).map_err(|_| Status::BadRequest)?;
 
-    let result = db.collection::<Notification>("notifications")
+    let result = db
+        .collection::<Notification>("notifications")
         .delete_one(doc! { "_id": oid }, None)
         .await
         .map_err(|_| Status::InternalServerError)?;
@@ -170,11 +175,9 @@ pub async fn delete_notification(
 
 // Get unread notification count
 #[get("/notifications/unread-count")]
-pub async fn get_unread_count(
-    _auth: AuthGuard,
-    db: &State<DbConn>,
-) -> Result<Json<serde_json::Value>, Status> {
-    let count = db.collection::<Notification>("notifications")
+pub async fn get_unread_count(db: &State<DbConn>) -> Result<Json<serde_json::Value>, Status> {
+    let count = db
+        .collection::<Notification>("notifications")
         .count_documents(doc! { "is_read": false }, None)
         .await
         .unwrap_or(0);
@@ -190,7 +193,6 @@ pub async fn get_unread_count(
 // Admin: Create a notification manually
 #[post("/admin/notifications", data = "<notification_data>")]
 pub async fn create_notification(
-    _auth: AuthGuard,
     db: &State<DbConn>,
     notification_data: Json<CreateNotificationDto>,
 ) -> Result<Json<serde_json::Value>, Status> {
@@ -205,7 +207,8 @@ pub async fn create_notification(
         created_at: BsonDateTime::now(),
     };
 
-    let result = db.collection::<Notification>("notifications")
+    let result = db
+        .collection::<Notification>("notifications")
         .insert_one(notification, None)
         .await
         .map_err(|_| Status::InternalServerError)?;
