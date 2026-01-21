@@ -15,6 +15,7 @@ import {
   Calendar,
   TrendingUp,
   PhoneCall,
+  Mail,
 } from "lucide-react";
 
 import { BASE_URL } from "./Constants";
@@ -38,6 +39,13 @@ const theme = {
 
 const API_BASE_URL = BASE_URL;
 
+// Helper function to construct full profile photo URL
+const getProfilePhotoUrl = (photoPath: string | null | undefined) => {
+  if (!photoPath) return null;
+  if (photoPath.startsWith("http")) return photoPath;
+  return `${API_BASE_URL}${photoPath}`;
+};
+
 // Subscription plan configurations
 const planConfig: Record<string, { color: string; bg: string; icon: any }> = {
   free: { color: "#6B7280", bg: "#F3F4F6", icon: User },
@@ -54,6 +62,7 @@ const SubscriptionDetailModal = ({ subscription, onClose }: any) => {
   const plan = subscription.subscription_plan?.toLowerCase() || "free";
   const config = planConfig[plan] || planConfig.free;
   const IconComponent = config.icon;
+  const profilePhotoUrl = getProfilePhotoUrl(subscription.user_photo);
 
   return (
     <div
@@ -113,22 +122,36 @@ const SubscriptionDetailModal = ({ subscription, onClose }: any) => {
           {/* Header */}
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "24px" }}>
             <div style={{ display: "flex", gap: "16px", alignItems: "flex-start" }}>
-              <div
-                style={{
-                  width: "64px",
-                  height: "64px",
-                  borderRadius: "50%",
-                  background: theme.colors.primary,
-                  color: "white",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: "24px",
-                  fontWeight: "700",
-                }}
-              >
-                {subscription.full_name?.charAt(0) || subscription.name?.charAt(0) || "?"}
-              </div>
+              {profilePhotoUrl ? (
+                <img
+                  src={profilePhotoUrl}
+                  alt={subscription.full_name || subscription.name}
+                  style={{
+                    width: "64px",
+                    height: "64px",
+                    borderRadius: "50%",
+                    objectFit: "cover",
+                    border: `2px solid ${theme.colors.border}`,
+                  }}
+                />
+              ) : (
+                <div
+                  style={{
+                    width: "64px",
+                    height: "64px",
+                    borderRadius: "50%",
+                    background: theme.colors.primary,
+                    color: "white",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    fontSize: "24px",
+                    fontWeight: "700",
+                  }}
+                >
+                  {subscription.full_name?.charAt(0) || subscription.name?.charAt(0) || "?"}
+                </div>
+              )}
               <div>
                 <h3 style={{ margin: 0, fontSize: "20px", fontWeight: "700", color: theme.colors.text }}>
                   {subscription.full_name || subscription.name}
@@ -136,12 +159,33 @@ const SubscriptionDetailModal = ({ subscription, onClose }: any) => {
                 <p style={{ margin: "4px 0 0", color: theme.colors.primary, fontSize: "14px", fontWeight: "500" }}>
                   {subscription.headline || subscription.category || "N/A"}
                 </p>
-                {subscription.user_mobile && (
-                  <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "8px", fontSize: "13px", color: theme.colors.textSecondary }}>
-                    <PhoneCall size={14} />
-                    {subscription.user_mobile}
-                  </div>
-                )}
+                {/* Contact Information */}
+                <div style={{ marginTop: "8px", display: "flex", flexDirection: "column", gap: "4px" }}>
+                  {subscription.user_mobile && (
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", color: theme.colors.textSecondary }}>
+                      <PhoneCall size={14} color={theme.colors.primary} />
+                      <a href={`tel:${subscription.user_mobile}`} style={{ color: theme.colors.text, textDecoration: "none" }}>
+                        {subscription.user_mobile}
+                      </a>
+                    </div>
+                  )}
+                  {subscription.user_email && (
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", color: theme.colors.textSecondary }}>
+                      <Mail size={14} color={theme.colors.primary} />
+                      <a href={`mailto:${subscription.user_email}`} style={{ color: theme.colors.text, textDecoration: "none" }}>
+                        {subscription.user_email}
+                      </a>
+                    </div>
+                  )}
+                  {(subscription.user_city || subscription.user_pincode) && (
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", color: theme.colors.textSecondary }}>
+                      <MapPin size={14} color={theme.colors.primary} />
+                      <span style={{ color: theme.colors.text }}>
+                        {[subscription.user_city, subscription.user_pincode].filter(Boolean).join(" - ")}
+                      </span>
+                    </div>
+                  )}
+                </div>
                 <span
                   style={{
                     display: "inline-flex",
@@ -283,6 +327,18 @@ const SubscriptionDetailModal = ({ subscription, onClose }: any) => {
                 </p>
               </div>
             )}
+
+            {subscription.user_kyc_status && (
+              <div style={{ padding: "16px", background: theme.colors.background, borderRadius: "8px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+                  <Shield size={16} color={theme.colors.textSecondary} />
+                  <span style={{ fontSize: "12px", color: theme.colors.textSecondary }}>KYC Status</span>
+                </div>
+                <p style={{ margin: 0, fontWeight: "600", color: theme.colors.text, textTransform: "capitalize" }}>
+                  {subscription.user_kyc_status}
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Skills */}
@@ -333,6 +389,37 @@ export const Subscriptions = () => {
     enterprise: 0,
   });
 
+  // Helper function to fetch user data by user_id
+  const fetchUserData = async (userId: string) => {
+    try {
+      const userResponse = await fetch(
+        `${API_BASE_URL}/admin/users/${userId}`,
+        {
+          headers: {
+            "Authorization": `Bearer ${localStorage.getItem("token") || ""}`,
+          },
+        }
+      );
+      if (userResponse.ok) {
+        const userData = await userResponse.json();
+        // Handle both possible response structures
+        const user = userData.data?.user || userData.data;
+        return {
+          user_mobile: user?.mobile,
+          user_photo: user?.profile_photo,
+          user_email: user?.email,
+          user_name: user?.name,
+          user_city: user?.city,
+          user_pincode: user?.pincode,
+          user_kyc_status: user?.kyc_status,
+        };
+      }
+    } catch (err) {
+      console.error("Error fetching user data:", err);
+    }
+    return null;
+  };
+
   const fetchSubscriptions = async () => {
     try {
       setLoading(true);
@@ -347,14 +434,22 @@ export const Subscriptions = () => {
       if (jobSeekersResponse.ok) {
         const data = await jobSeekersResponse.json();
         const profiles = data.data?.profiles || [];
-        profiles.forEach((profile: any) => {
-          allSubscriptions.push({
-            ...profile,
-            id: profile.id || profile._id?.$oid,
-            userType: "job_seeker",
-            subscription_plan: profile.subscription_plan || "free",
-          });
-        });
+        
+        // Fetch user data for each job seeker
+        const profilesWithUserData = await Promise.all(
+          profiles.map(async (profile: any) => {
+            const userId = profile.user_id?.$oid || profile.user_id;
+            const userData = userId ? await fetchUserData(userId) : null;
+            return {
+              ...profile,
+              ...userData,
+              id: profile.id || profile._id?.$oid,
+              userType: "job_seeker",
+              subscription_plan: profile.subscription_plan || "free",
+            };
+          })
+        );
+        allSubscriptions.push(...profilesWithUserData);
       }
 
       // Fetch workers
@@ -366,14 +461,22 @@ export const Subscriptions = () => {
       if (workersResponse.ok) {
         const data = await workersResponse.json();
         const workers = data.data?.workers || [];
-        workers.forEach((worker: any) => {
-          allSubscriptions.push({
-            ...worker,
-            id: worker.id || worker._id?.$oid,
-            userType: "worker",
-            subscription_plan: worker.subscription_plan || "free",
-          });
-        });
+        
+        // Fetch user data for each worker
+        const workersWithUserData = await Promise.all(
+          workers.map(async (worker: any) => {
+            const userId = worker.user_id?.$oid || worker.user_id;
+            const userData = userId ? await fetchUserData(userId) : null;
+            return {
+              ...worker,
+              ...userData,
+              id: worker.id || worker._id?.$oid,
+              userType: "worker",
+              subscription_plan: worker.subscription_plan || "free",
+            };
+          })
+        );
+        allSubscriptions.push(...workersWithUserData);
       }
 
       setSubscriptions(allSubscriptions);
@@ -410,7 +513,10 @@ export const Subscriptions = () => {
   const filteredSubscriptions = subscriptions.filter((sub) => {
     const matchesSearch =
       (sub.full_name || sub.name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (sub.headline || sub.category || "").toLowerCase().includes(searchQuery.toLowerCase());
+      (sub.headline || sub.category || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (sub.user_mobile || "").includes(searchQuery) ||
+      (sub.user_email || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (sub.user_city || "").toLowerCase().includes(searchQuery.toLowerCase());
 
     const matchesView = activeView === "all" || sub.userType === activeView;
 
@@ -546,7 +652,7 @@ export const Subscriptions = () => {
               />
               <input
                 type="text"
-                placeholder="Search by name..."
+                placeholder="Search by name, phone, email..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 style={{
@@ -554,7 +660,7 @@ export const Subscriptions = () => {
                   borderRadius: "8px",
                   border: `1px solid ${theme.colors.border}`,
                   fontSize: "14px",
-                  width: "250px",
+                  width: "280px",
                   outline: "none",
                 }}
               />
@@ -620,7 +726,7 @@ export const Subscriptions = () => {
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
                 <tr>
-                  {["User", "Phone", "Type", "Plan", "Details", "Actions"].map((header) => (
+                  {["User", "Contact", "Type", "Plan", "Details", "Actions"].map((header) => (
                     <th
                       key={header}
                       style={{
@@ -640,107 +746,144 @@ export const Subscriptions = () => {
                 </tr>
               </thead>
               <tbody>
-                {filteredSubscriptions.map((sub: any, index: number) => (
-                  <tr
-                    key={sub.id || index}
-                    style={{
-                      borderBottom: `1px solid ${theme.colors.border}`,
-                      transition: "background 0.2s",
-                    }}
-                    onMouseEnter={(e) => (e.currentTarget.style.background = theme.colors.background)}
-                    onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                  >
-                    <td style={{ padding: "16px" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                        <div
+                {filteredSubscriptions.map((sub: any, index: number) => {
+                  const profilePhotoUrl = getProfilePhotoUrl(sub.user_photo);
+                  
+                  return (
+                    <tr
+                      key={sub.id || index}
+                      style={{
+                        borderBottom: `1px solid ${theme.colors.border}`,
+                        transition: "background 0.2s",
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = theme.colors.background)}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                    >
+                      <td style={{ padding: "16px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                          {profilePhotoUrl ? (
+                            <img
+                              src={profilePhotoUrl}
+                              alt={sub.full_name || sub.name}
+                              style={{
+                                width: "40px",
+                                height: "40px",
+                                borderRadius: "50%",
+                                objectFit: "cover",
+                                border: `2px solid ${theme.colors.border}`,
+                              }}
+                            />
+                          ) : (
+                            <div
+                              style={{
+                                width: "40px",
+                                height: "40px",
+                                borderRadius: "50%",
+                                background: theme.colors.primary,
+                                color: "white",
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "center",
+                                fontSize: "16px",
+                                fontWeight: "700",
+                              }}
+                            >
+                              {(sub.full_name || sub.name || "?").charAt(0)}
+                            </div>
+                          )}
+                          <div>
+                            <div style={{ fontWeight: "600", color: theme.colors.text }}>
+                              {sub.full_name || sub.name}
+                            </div>
+                            <div style={{ fontSize: "13px", color: theme.colors.textSecondary }}>
+                              {sub.headline || sub.category || "N/A"}
+                            </div>
+                          </div>
+                        </div>
+                      </td>
+                      <td style={{ padding: "16px" }}>
+                        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                          {sub.user_mobile && (
+                            <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", color: theme.colors.textSecondary }}>
+                              <PhoneCall size={12} />
+                              {sub.user_mobile}
+                            </div>
+                          )}
+                          {sub.user_email && (
+                            <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", color: theme.colors.textSecondary, maxWidth: "180px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                              <Mail size={12} style={{ flexShrink: 0 }} />
+                              {sub.user_email}
+                            </div>
+                          )}
+                          {sub.user_city && (
+                            <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", color: theme.colors.textSecondary }}>
+                              <MapPin size={12} />
+                              {sub.user_city}
+                            </div>
+                          )}
+                          {!sub.user_mobile && !sub.user_email && !sub.user_city && (
+                            <span style={{ fontSize: "12px", color: theme.colors.textSecondary }}>N/A</span>
+                          )}
+                        </div>
+                      </td>
+                      <td style={{ padding: "16px" }}>
+                        <span
                           style={{
-                            width: "40px",
-                            height: "40px",
-                            borderRadius: "50%",
-                            background: theme.colors.primary,
-                            color: "white",
-                            display: "flex",
+                            display: "inline-flex",
                             alignItems: "center",
-                            justifyContent: "center",
-                            fontSize: "16px",
-                            fontWeight: "700",
+                            gap: "4px",
+                            padding: "4px 10px",
+                            borderRadius: "12px",
+                            fontSize: "12px",
+                            fontWeight: "600",
+                            background: sub.userType === "job_seeker" ? "#DBEAFE" : "#D1FAE5",
+                            color: sub.userType === "job_seeker" ? "#3B82F6" : "#10B981",
                           }}
                         >
-                          {(sub.full_name || sub.name || "?").charAt(0)}
-                        </div>
-                        <div>
-                          <div style={{ fontWeight: "600", color: theme.colors.text }}>
-                            {sub.full_name || sub.name}
+                          {sub.userType === "job_seeker" ? <Briefcase size={12} /> : <Users size={12} />}
+                          {sub.userType === "job_seeker" ? "Job Seeker" : "Worker"}
+                        </span>
+                      </td>
+                      <td style={{ padding: "16px" }}>
+                        {getPlanBadge(sub.subscription_plan)}
+                      </td>
+                      <td style={{ padding: "16px", color: theme.colors.textSecondary, fontSize: "13px" }}>
+                        {sub.userType === "job_seeker" ? (
+                          <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                            <span>{sub.experience_years ? `${sub.experience_years} yrs exp` : "N/A"}</span>
+                            <span>{sub.profile_views || 0} profile views</span>
                           </div>
-                          <div style={{ fontSize: "13px", color: theme.colors.textSecondary }}>
-                            {sub.headline || sub.category || "N/A"}
+                        ) : (
+                          <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                            <span>{sub.jobs || 0} jobs completed</span>
+                            <span>{sub.rating ? `${sub.rating} rating` : "N/A"}</span>
                           </div>
-                        </div>
-                      </div>
-                    </td>
-                    <td style={{ padding: "16px", color: theme.colors.textSecondary, fontSize: "13px" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                        <PhoneCall size={14} />
-                        {sub.user_mobile || "N/A"}
-                      </div>
-                    </td>
-                    <td style={{ padding: "16px" }}>
-                      <span
-                        style={{
-                          display: "inline-flex",
-                          alignItems: "center",
-                          gap: "4px",
-                          padding: "4px 10px",
-                          borderRadius: "12px",
-                          fontSize: "12px",
-                          fontWeight: "600",
-                          background: sub.userType === "job_seeker" ? "#DBEAFE" : "#D1FAE5",
-                          color: sub.userType === "job_seeker" ? "#3B82F6" : "#10B981",
-                        }}
-                      >
-                        {sub.userType === "job_seeker" ? <Briefcase size={12} /> : <Users size={12} />}
-                        {sub.userType === "job_seeker" ? "Job Seeker" : "Worker"}
-                      </span>
-                    </td>
-                    <td style={{ padding: "16px" }}>
-                      {getPlanBadge(sub.subscription_plan)}
-                    </td>
-                    <td style={{ padding: "16px", color: theme.colors.textSecondary, fontSize: "13px" }}>
-                      {sub.userType === "job_seeker" ? (
-                        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                          <span>{sub.experience_years ? `${sub.experience_years} yrs exp` : "N/A"}</span>
-                          <span>{sub.profile_views || 0} profile views</span>
-                        </div>
-                      ) : (
-                        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                          <span>{sub.jobs || 0} jobs completed</span>
-                          <span>{sub.rating ? `${sub.rating} rating` : "N/A"}</span>
-                        </div>
-                      )}
-                    </td>
-                    <td style={{ padding: "16px" }}>
-                      <button
-                        onClick={() => setSelectedSubscription(sub)}
-                        style={{
-                          padding: "8px 16px",
-                          background: theme.colors.primary,
-                          color: "white",
-                          border: "none",
-                          borderRadius: "6px",
-                          fontSize: "13px",
-                          fontWeight: "600",
-                          cursor: "pointer",
-                          display: "flex",
-                          alignItems: "center",
-                          gap: "6px",
-                        }}
-                      >
-                        <Eye size={14} />
-                        View
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                        )}
+                      </td>
+                      <td style={{ padding: "16px" }}>
+                        <button
+                          onClick={() => setSelectedSubscription(sub)}
+                          style={{
+                            padding: "8px 16px",
+                            background: theme.colors.primary,
+                            color: "white",
+                            border: "none",
+                            borderRadius: "6px",
+                            fontSize: "13px",
+                            fontWeight: "600",
+                            cursor: "pointer",
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "6px",
+                          }}
+                        >
+                          <Eye size={14} />
+                          View
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -755,4 +898,4 @@ export const Subscriptions = () => {
       )}
     </div>
   );
-};
+}; 
