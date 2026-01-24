@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 
 import { BASE_URL } from "./Constants";
+import { Pagination } from "./Pagination";
 
 // ==================== CONSTANTS ====================
 const theme = {
@@ -380,6 +381,8 @@ export const Subscriptions = () => {
   const [planFilter, setPlanFilter] = useState<string>("all");
   const [selectedSubscription, setSelectedSubscription] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(20);
   const [stats, setStats] = useState({
     total: 0,
     free: 0,
@@ -525,6 +528,22 @@ export const Subscriptions = () => {
 
     return matchesSearch && matchesView && matchesPlan;
   });
+
+  // Pagination logic
+  const totalPages = Math.ceil(filteredSubscriptions.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedSubscriptions = filteredSubscriptions.slice(startIndex, endIndex);
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handleItemsPerPageChange = (newItemsPerPage: number) => {
+    setItemsPerPage(newItemsPerPage);
+    setCurrentPage(1);
+  };
 
   const getPlanBadge = (plan: string) => {
     const normalizedPlan = (plan || "free").toLowerCase();
@@ -746,7 +765,7 @@ export const Subscriptions = () => {
                 </tr>
               </thead>
               <tbody>
-                {filteredSubscriptions.map((sub: any, index: number) => {
+                {paginatedSubscriptions.map((sub: any, index: number) => {
                   const profilePhotoUrl = getProfilePhotoUrl(sub.user_photo);
                   
                   return (
@@ -887,6 +906,17 @@ export const Subscriptions = () => {
               </tbody>
             </table>
           </div>
+        )}
+
+        {!loading && filteredSubscriptions.length > 0 && (
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            itemsPerPage={itemsPerPage}
+            totalItems={filteredSubscriptions.length}
+            onPageChange={handlePageChange}
+            onItemsPerPageChange={handleItemsPerPageChange}
+          />
         )}
       </div>
 

@@ -38,6 +38,7 @@ const theme = {
 };
 
 import { BASE_URL } from "./Constants";
+import { Pagination } from "./Pagination";
 const API_BASE_URL = BASE_URL;
 
 // ==================== KYC DETAIL MODAL ====================
@@ -375,6 +376,8 @@ export const KYC = () => {
   const [activeView, setActiveView] = useState<"all" | "pending" | "approved" | "rejected">("all");
   const [selectedKyc, setSelectedKyc] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(20);
 
   const fetchWorkers = async () => {
     try {
@@ -465,6 +468,22 @@ export const KYC = () => {
     kyc.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     kyc.document_number?.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  // Pagination logic
+  const totalPages = Math.ceil(filteredSubmissions.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedSubmissions = filteredSubmissions.slice(startIndex, endIndex);
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handleItemsPerPageChange = (newItemsPerPage: number) => {
+    setItemsPerPage(newItemsPerPage);
+    setCurrentPage(1);
+  };
 
   const getStatusIcon = (status: string) => {
     switch (status.toLowerCase()) {
@@ -621,7 +640,7 @@ export const KYC = () => {
                 </tr>
               </thead>
               <tbody>
-                {filteredSubmissions.map((kyc: any, index: number) => (
+                {paginatedSubmissions.map((kyc: any, index: number) => (
                   <tr
                     key={kyc._id?.$oid || index}
                     style={{
@@ -709,6 +728,17 @@ export const KYC = () => {
               </tbody>
             </table>
           </div>
+        )}
+
+        {!loading && filteredSubmissions.length > 0 && (
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            itemsPerPage={itemsPerPage}
+            totalItems={filteredSubmissions.length}
+            onPageChange={handlePageChange}
+            onItemsPerPageChange={handleItemsPerPageChange}
+          />
         )}
       </div>
 

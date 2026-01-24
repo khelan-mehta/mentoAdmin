@@ -38,6 +38,7 @@ const theme = {
 };
 
 import { BASE_URL } from "./Constants";
+import { Pagination } from "./Pagination";
 const API_BASE_URL = BASE_URL;
 
 // ==================== CREATE JOB MODAL ====================
@@ -1224,6 +1225,8 @@ export const Jobs = () => {
   const [selectedJob, setSelectedJob] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(20);
 
   const fetchJobs = async () => {
     try {
@@ -1350,6 +1353,22 @@ export const Jobs = () => {
       job.company?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       job.location?.toLowerCase().includes(searchQuery.toLowerCase()),
   );
+
+  // Pagination logic
+  const totalPages = Math.ceil(filteredJobs.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedJobs = filteredJobs.slice(startIndex, endIndex);
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handleItemsPerPageChange = (newItemsPerPage: number) => {
+    setItemsPerPage(newItemsPerPage);
+    setCurrentPage(1);
+  };
 
   const getStatusConfig = (status: string) => {
     switch (status?.toLowerCase()) {
@@ -1560,7 +1579,7 @@ export const Jobs = () => {
                 </tr>
               </thead>
               <tbody>
-                {filteredJobs.map((job: any, index: number) => {
+                {paginatedJobs.map((job: any, index: number) => {
                   const statusConfig = getStatusConfig(job.status);
                   const StatusIcon = statusConfig.icon;
                   return (
@@ -1702,6 +1721,17 @@ export const Jobs = () => {
               </tbody>
             </table>
           </div>
+        )}
+
+        {!loading && filteredJobs.length > 0 && (
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            itemsPerPage={itemsPerPage}
+            totalItems={filteredJobs.length}
+            onPageChange={handlePageChange}
+            onItemsPerPageChange={handleItemsPerPageChange}
+          />
         )}
       </div>
 

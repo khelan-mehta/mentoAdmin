@@ -19,6 +19,7 @@ import {
   Award,
 } from "lucide-react";
 import { BASE_URL } from "./Constants";
+import { Pagination } from "./Pagination";
 
 const API_BASE_URL = BASE_URL;
 
@@ -517,6 +518,8 @@ export const WorkerProfiles = () => {
   const [selectedWorker, setSelectedWorker] = useState<any>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<any>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(20);
 
   const fetchWorkers = async () => {
     try {
@@ -614,15 +617,37 @@ export const WorkerProfiles = () => {
   };
 
   const filteredWorkers = workers.filter((worker) => {
+    if (!searchQuery) return true;
+
     const searchLower = searchQuery.toLowerCase();
     const matchesSearch =
+      worker.user_name?.toLowerCase().includes(searchLower) ||
+      worker.user_mobile?.toLowerCase().includes(searchLower) ||
+      worker.user_email?.toLowerCase().includes(searchLower) ||
       worker.user_id?.toString().toLowerCase().includes(searchLower) ||
       worker.categories?.some((cat: string) => cat.toLowerCase().includes(searchLower)) ||
       worker.subcategories?.some((sub: string) => sub.toLowerCase().includes(searchLower)) ||
-      worker.description?.toLowerCase().includes(searchLower);
+      worker.description?.toLowerCase().includes(searchLower) ||
+      worker.license_number?.toLowerCase().includes(searchLower);
 
     return matchesSearch;
   });
+
+  // Pagination logic
+  const totalPages = Math.ceil(filteredWorkers.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedWorkers = filteredWorkers.slice(startIndex, endIndex);
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handleItemsPerPageChange = (newItemsPerPage: number) => {
+    setItemsPerPage(newItemsPerPage);
+    setCurrentPage(1);
+  };
 
   return (
     <div style={{ padding: "24px" }}>
@@ -656,20 +681,32 @@ export const WorkerProfiles = () => {
           </h2>
 
           <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
-            <input
-              type="text"
-              placeholder="Search workers..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              style={{
-                padding: "10px 16px",
-                borderRadius: "8px",
-                border: `1px solid ${theme.colors.border}`,
-                fontSize: "14px",
-                width: "220px",
-                outline: "none",
-              }}
-            />
+            <div style={{ position: "relative" }}>
+              <Search
+                size={18}
+                color={theme.colors.textSecondary}
+                style={{
+                  position: "absolute",
+                  left: "12px",
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                }}
+              />
+              <input
+                type="text"
+                placeholder="Search by name, contact, category..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                style={{
+                  padding: "10px 16px 10px 40px",
+                  borderRadius: "8px",
+                  border: `1px solid ${theme.colors.border}`,
+                  fontSize: "14px",
+                  width: "280px",
+                  outline: "none",
+                }}
+              />
+            </div>
           </div>
         </div>
 
@@ -735,225 +772,442 @@ export const WorkerProfiles = () => {
             </p>
           </div>
         ) : (
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead>
-                <tr>
-                  {[
-                    "User Name",
-                    "Contact",
-                    "Categories",
-                    "Experience",
-                    "Hourly Rate",
-                    "Rating",
-                    "Status",
-                    "Actions",
-                  ].map((header) => (
-                    <th
-                      key={header}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fill, minmax(380px, 1fr))",
+              gap: "20px",
+            }}
+          >
+            {paginatedWorkers.map((worker: any, index: number) => (
+              <div
+                key={worker.id?.$oid || worker._id?.$oid || index}
+                style={{
+                  background: theme.colors.surface,
+                  borderRadius: "16px",
+                  padding: "24px",
+                  border: `1px solid ${theme.colors.border}`,
+                  boxShadow: "0 1px 3px rgba(0,0,0,0.05)",
+                  transition: "all 0.2s ease",
+                  cursor: "pointer",
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.boxShadow = "0 4px 12px rgba(0,0,0,0.1)";
+                  e.currentTarget.style.transform = "translateY(-2px)";
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.boxShadow = "0 1px 3px rgba(0,0,0,0.05)";
+                  e.currentTarget.style.transform = "translateY(0)";
+                }}
+              >
+                {/* Header with Avatar and Status */}
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "flex-start",
+                    marginBottom: "16px",
+                  }}
+                >
+                  <div style={{ display: "flex", gap: "12px", flex: 1, minWidth: 0 }}>
+                    <div
                       style={{
-                        textAlign: "left",
-                        padding: "12px 16px",
-                        fontSize: "12px",
-                        fontWeight: "600",
-                        color: theme.colors.textSecondary,
-                        textTransform: "uppercase",
-                        borderBottom: `1px solid ${theme.colors.border}`,
-                        background: theme.colors.background,
+                        width: "56px",
+                        height: "56px",
+                        borderRadius: "50%",
+                        background: `linear-gradient(135deg, ${theme.colors.primary} 0%, #0284C7 100%)`,
+                        color: "white",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontSize: "20px",
+                        fontWeight: "700",
+                        flexShrink: 0,
                       }}
                     >
-                      {header}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {filteredWorkers.map((worker: any, index: number) => (
-                  <tr
-                    key={worker.id?.$oid || worker._id?.$oid || index}
+                      {(worker.user_name || "W").charAt(0).toUpperCase()}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div
+                        style={{
+                          fontSize: "16px",
+                          fontWeight: "700",
+                          color: theme.colors.text,
+                          marginBottom: "4px",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {worker.user_name || "N/A"}
+                      </div>
+                      {worker.user_mobile && (
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "4px",
+                            fontSize: "12px",
+                            color: theme.colors.textSecondary,
+                            marginBottom: "2px",
+                          }}
+                        >
+                          <PhoneCall size={12} />
+                          {worker.user_mobile}
+                        </div>
+                      )}
+                      {worker.user_email && (
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "4px",
+                            fontSize: "11px",
+                            color: theme.colors.textSecondary,
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          <Mail size={12} style={{ flexShrink: 0 }} />
+                          {worker.user_email}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                  <div
                     style={{
-                      borderBottom: `1px solid ${theme.colors.border}`,
-                      transition: "background 0.2s",
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: "4px",
+                      alignItems: "flex-end",
+                      flexShrink: 0,
                     }}
-                    onMouseEnter={(e) =>
-                      (e.currentTarget.style.background = theme.colors.background)
-                    }
-                    onMouseLeave={(e) =>
-                      (e.currentTarget.style.background = "transparent")
-                    }
                   >
-                    <td
+                    {worker.is_verified ? (
+                      <span
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "4px",
+                          padding: "4px 10px",
+                          borderRadius: "12px",
+                          fontSize: "11px",
+                          fontWeight: "600",
+                          background: "#D1FAE5",
+                          color: theme.colors.success,
+                        }}
+                      >
+                        <CheckCircle size={12} />
+                        Verified
+                      </span>
+                    ) : (
+                      <span
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "4px",
+                          padding: "4px 10px",
+                          borderRadius: "12px",
+                          fontSize: "11px",
+                          fontWeight: "600",
+                          background: "#FEE2E2",
+                          color: theme.colors.danger,
+                        }}
+                      >
+                        <XCircle size={12} />
+                        Unverified
+                      </span>
+                    )}
+                    {worker.is_available && (
+                      <span
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "4px",
+                          padding: "4px 10px",
+                          borderRadius: "12px",
+                          fontSize: "11px",
+                          fontWeight: "600",
+                          background: "#DBEAFE",
+                          color: theme.colors.primary,
+                        }}
+                      >
+                        Available
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Categories */}
+                {worker.categories && worker.categories.length > 0 && (
+                  <div style={{ marginBottom: "16px" }}>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: "6px" }}>
+                      {worker.categories.slice(0, 3).map((cat: string, idx: number) => (
+                        <span
+                          key={idx}
+                          style={{
+                            padding: "4px 10px",
+                            borderRadius: "12px",
+                            background: `${theme.colors.primary}15`,
+                            color: theme.colors.primary,
+                            fontSize: "11px",
+                            fontWeight: "600",
+                          }}
+                        >
+                          {cat}
+                        </span>
+                      ))}
+                      {worker.categories.length > 3 && (
+                        <span
+                          style={{
+                            padding: "4px 10px",
+                            borderRadius: "12px",
+                            background: theme.colors.border,
+                            color: theme.colors.textSecondary,
+                            fontSize: "11px",
+                            fontWeight: "600",
+                          }}
+                        >
+                          +{worker.categories.length - 3} more
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Info Grid */}
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: "12px",
+                    marginBottom: "16px",
+                    padding: "16px",
+                    background: theme.colors.background,
+                    borderRadius: "12px",
+                  }}
+                >
+                  <div>
+                    <div
                       style={{
-                        padding: "16px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        marginBottom: "4px",
+                        color: theme.colors.textSecondary,
+                        fontSize: "11px",
+                      }}
+                    >
+                      <Briefcase size={12} />
+                      Experience
+                    </div>
+                    <div
+                      style={{
                         fontWeight: "600",
                         color: theme.colors.text,
                         fontSize: "14px",
                       }}
                     >
-                      {worker.user_name || "N/A"}
-                    </td>
-                    <td
+                      {worker.experience_years || 0} years
+                    </div>
+                  </div>
+                  <div>
+                    <div
                       style={{
-                        padding: "16px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        marginBottom: "4px",
                         color: theme.colors.textSecondary,
-                        fontSize: "13px",
+                        fontSize: "11px",
                       }}
                     >
-                      {worker.user_mobile || worker.user_email || "N/A"}
-                    </td>
-                    <td style={{ padding: "16px", color: theme.colors.textSecondary }}>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
-                        {worker.categories?.slice(0, 2).map((cat: string, idx: number) => (
-                          <span
-                            key={idx}
-                            style={{
-                              padding: "2px 8px",
-                              borderRadius: "12px",
-                              background: `${theme.colors.primary}15`,
-                              color: theme.colors.primary,
-                              fontSize: "11px",
-                              fontWeight: "600",
-                            }}
-                          >
-                            {cat}
-                          </span>
-                        ))}
-                        {worker.categories?.length > 2 && (
-                          <span
-                            style={{
-                              padding: "2px 8px",
-                              fontSize: "11px",
-                              color: theme.colors.textSecondary,
-                            }}
-                          >
-                            +{worker.categories.length - 2}
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td style={{ padding: "16px", color: theme.colors.textSecondary }}>
-                      {worker.experience_years || 0} years
-                    </td>
-                    <td style={{ padding: "16px", color: theme.colors.textSecondary }}>
+                      <DollarSign size={12} />
+                      Hourly Rate
+                    </div>
+                    <div
+                      style={{
+                        fontWeight: "600",
+                        color: theme.colors.success,
+                        fontSize: "14px",
+                      }}
+                    >
                       ${worker.hourly_rate || 0}/hr
-                    </td>
-                    <td style={{ padding: "16px" }}>
+                    </div>
+                  </div>
+                  <div>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        marginBottom: "4px",
+                        color: theme.colors.textSecondary,
+                        fontSize: "11px",
+                      }}
+                    >
+                      <Star size={12} />
+                      Rating
+                    </div>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "4px",
+                      }}
+                    >
+                      <Star
+                        size={14}
+                        color={theme.colors.warning}
+                        fill={theme.colors.warning}
+                      />
+                      <span
+                        style={{
+                          fontWeight: "600",
+                          color: theme.colors.text,
+                          fontSize: "14px",
+                        }}
+                      >
+                        {worker.rating?.toFixed(1) || "0.0"}
+                      </span>
+                      <span
+                        style={{
+                          fontSize: "11px",
+                          color: theme.colors.textSecondary,
+                        }}
+                      >
+                        ({worker.total_reviews || 0})
+                      </span>
+                    </div>
+                  </div>
+                  {worker.license_number && (
+                    <div>
                       <div
                         style={{
                           display: "flex",
                           alignItems: "center",
-                          gap: "4px",
+                          gap: "6px",
+                          marginBottom: "4px",
+                          color: theme.colors.textSecondary,
+                          fontSize: "11px",
                         }}
                       >
-                        <Star size={14} color={theme.colors.warning} fill={theme.colors.warning} />
-                        <span style={{ fontWeight: "600", color: theme.colors.text }}>
-                          {worker.rating?.toFixed(1) || "0.0"}
-                        </span>
-                        <span style={{ fontSize: "12px", color: theme.colors.textSecondary }}>
-                          ({worker.total_reviews || 0})
-                        </span>
+                        <Award size={12} />
+                        License
                       </div>
-                    </td>
-                    <td style={{ padding: "16px" }}>
-                      <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
-                        {worker.is_verified ? (
-                          <span
-                            style={{
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: "4px",
-                              padding: "4px 8px",
-                              borderRadius: "12px",
-                              fontSize: "11px",
-                              fontWeight: "600",
-                              background: "#D1FAE5",
-                              color: theme.colors.success,
-                            }}
-                          >
-                            <CheckCircle size={12} />
-                            Verified
-                          </span>
-                        ) : (
-                          <span
-                            style={{
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: "4px",
-                              padding: "4px 8px",
-                              borderRadius: "12px",
-                              fontSize: "11px",
-                              fontWeight: "600",
-                              background: "#FEE2E2",
-                              color: theme.colors.danger,
-                            }}
-                          >
-                            <XCircle size={12} />
-                            Unverified
-                          </span>
-                        )}
-                        {worker.is_available && (
-                          <span
-                            style={{
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: "4px",
-                              padding: "4px 8px",
-                              borderRadius: "12px",
-                              fontSize: "11px",
-                              fontWeight: "600",
-                              background: "#DBEAFE",
-                              color: theme.colors.primary,
-                            }}
-                          >
-                            Available
-                          </span>
-                        )}
+                      <div
+                        style={{
+                          fontWeight: "600",
+                          color: theme.colors.text,
+                          fontSize: "13px",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        {worker.license_number}
                       </div>
-                    </td>
-                    <td style={{ padding: "16px" }}>
-                      <div style={{ display: "flex", gap: "6px" }}>
-                        <button
-                          onClick={() => setSelectedWorker(worker)}
-                          style={{
-                            padding: "8px 12px",
-                            background: theme.colors.primary,
-                            color: "white",
-                            border: "none",
-                            borderRadius: "6px",
-                            fontSize: "12px",
-                            fontWeight: "600",
-                            cursor: "pointer",
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "4px",
-                          }}
-                        >
-                          <Edit size={14} />
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => {
-                            setDeleteTarget(worker);
-                            setShowDeleteModal(true);
-                          }}
-                          style={{
-                            padding: "8px",
-                            background: theme.colors.danger,
-                            color: "white",
-                            border: "none",
-                            borderRadius: "6px",
-                            cursor: "pointer",
-                          }}
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                    </div>
+                  )}
+                </div>
+
+                {/* Description */}
+                {worker.description && (
+                  <div
+                    style={{
+                      marginBottom: "16px",
+                      padding: "12px",
+                      background: theme.colors.background,
+                      borderRadius: "8px",
+                      fontSize: "12px",
+                      color: theme.colors.textSecondary,
+                      lineHeight: "1.5",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      display: "-webkit-box",
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: "vertical",
+                    }}
+                  >
+                    {worker.description}
+                  </div>
+                )}
+
+                {/* Actions */}
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedWorker(worker);
+                    }}
+                    style={{
+                      flex: 1,
+                      padding: "10px",
+                      background: theme.colors.primary,
+                      color: "white",
+                      border: "none",
+                      borderRadius: "8px",
+                      fontSize: "13px",
+                      fontWeight: "600",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: "6px",
+                      transition: "all 0.2s",
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = "#0284C7";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = theme.colors.primary;
+                    }}
+                  >
+                    <Edit size={14} />
+                    Edit
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDeleteTarget(worker);
+                      setShowDeleteModal(true);
+                    }}
+                    style={{
+                      padding: "10px 14px",
+                      background: "#FEE2E2",
+                      color: theme.colors.danger,
+                      border: "none",
+                      borderRadius: "8px",
+                      cursor: "pointer",
+                      transition: "all 0.2s",
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = theme.colors.danger;
+                      e.currentTarget.style.color = "white";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = "#FEE2E2";
+                      e.currentTarget.style.color = theme.colors.danger;
+                    }}
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
+        )}
+
+        {!loading && filteredWorkers.length > 0 && (
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            itemsPerPage={itemsPerPage}
+            totalItems={filteredWorkers.length}
+            onPageChange={handlePageChange}
+            onItemsPerPageChange={handleItemsPerPageChange}
+          />
         )}
       </div>
 

@@ -15,6 +15,7 @@ import {
   Shield,
 } from "lucide-react";
 import { BASE_URL } from "./Constants";
+import { Pagination } from "./Pagination";
 
 const API_BASE_URL = BASE_URL;
 
@@ -484,6 +485,24 @@ const DeleteConfirmModal = ({
   );
 };
 
+// ==================== HELPER FUNCTIONS ====================
+const formatDate = (dateValue: any): string => {
+  if (!dateValue) return "N/A";
+
+  try {
+    // Handle MongoDB date format
+    const timestamp = dateValue.$date?.$numberLong || dateValue.$date || dateValue;
+    const date = new Date(timestamp);
+
+    // Check if date is valid
+    if (isNaN(date.getTime())) return "N/A";
+
+    return date.toLocaleDateString();
+  } catch (error) {
+    return "N/A";
+  }
+};
+
 // ==================== USERS COMPONENT ====================
 export const Users = () => {
   const [users, setUsers] = useState<any[]>([]);
@@ -496,6 +515,8 @@ export const Users = () => {
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<any>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(20);
 
   const fetchUsers = async () => {
     try {
@@ -578,6 +599,22 @@ export const Users = () => {
     } finally {
       setActionLoading(false);
     }
+  };
+
+  // Pagination logic
+  const totalPages = Math.ceil(users.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedUsers = users.slice(startIndex, endIndex);
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handleItemsPerPageChange = (newItemsPerPage: number) => {
+    setItemsPerPage(newItemsPerPage);
+    setCurrentPage(1);
   };
 
   return (
@@ -733,7 +770,7 @@ export const Users = () => {
                 </tr>
               </thead>
               <tbody>
-                {users.map((user: any, index: number) => (
+                {paginatedUsers.map((user: any, index: number) => (
                   <tr
                     key={user.id?.$oid || user._id?.$oid || index}
                     style={{
@@ -859,11 +896,7 @@ export const Users = () => {
                         fontSize: "13px",
                       }}
                     >
-                      {user.created_at
-                        ? new Date(
-                            user.created_at.$date?.$numberLong || user.created_at
-                          ).toLocaleDateString()
-                        : "N/A"}
+                      {formatDate(user.created_at)}
                     </td>
                     <td style={{ padding: "16px" }}>
                       <div style={{ display: "flex", gap: "6px" }}>
@@ -909,6 +942,17 @@ export const Users = () => {
               </tbody>
             </table>
           </div>
+        )}
+
+        {!loading && users.length > 0 && (
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            itemsPerPage={itemsPerPage}
+            totalItems={users.length}
+            onPageChange={handlePageChange}
+            onItemsPerPageChange={handleItemsPerPageChange}
+          />
         )}
       </div>
 

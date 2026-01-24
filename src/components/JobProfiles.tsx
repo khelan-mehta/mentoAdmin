@@ -21,6 +21,7 @@ import {
   Mail,
   Shield,
   Hash,
+  Download,
 } from "lucide-react";
 
 // ==================== CONSTANTS ====================
@@ -1084,6 +1085,89 @@ const JobProfileDetailModal = ({
   );
 };
 
+// ==================== CSV EXPORT HELPER ====================
+const exportToCSV = (data: any[], filename: string) => {
+  if (data.length === 0) {
+    alert("No data to export");
+    return;
+  }
+
+  // Define headers
+  const headers = [
+    "Full Name",
+    "Email",
+    "Mobile",
+    "Headline",
+    "City",
+    "Pincode",
+    "Experience (Years)",
+    "Skills",
+    "Salary Range",
+    "Preferred Locations",
+    "Job Types",
+    "Subscription Plan",
+    "KYC Status",
+    "Verified",
+    "Profile Views",
+    "Education",
+    "Work Experience",
+  ];
+
+  // Convert data to CSV rows
+  const rows = data.map((profile) => {
+    const education = profile.education
+      ?.map((edu: any) => `${edu.degree} at ${edu.institution}`)
+      .join("; ") || "N/A";
+
+    const workExp = profile.work_experience
+      ?.map((exp: any) => `${exp.title} at ${exp.company}`)
+      .join("; ") || "N/A";
+
+    return [
+      profile.full_name || profile.user_name || "N/A",
+      profile.user_email || "N/A",
+      profile.user_mobile || "N/A",
+      profile.headline || "N/A",
+      profile.user_city || "N/A",
+      profile.user_pincode || "N/A",
+      profile.experience_years || 0,
+      profile.skills?.join(", ") || "N/A",
+      profile.salary_range || "N/A",
+      profile.preferred_locations?.join(", ") || "N/A",
+      profile.job_types?.join(", ") || "N/A",
+      profile.subscription_plan || "Free",
+      profile.user_kyc_status || "N/A",
+      profile.is_verified ? "Yes" : "No",
+      profile.profile_views || 0,
+      education,
+      workExp,
+    ];
+  });
+
+  // Create CSV content
+  const csvContent = [
+    headers.join(","),
+    ...rows.map((row) =>
+      row.map((cell) => {
+        // Escape commas and quotes in cell values
+        const cellStr = String(cell).replace(/"/g, '""');
+        return `"${cellStr}"`;
+      }).join(",")
+    ),
+  ].join("\n");
+
+  // Create and download file
+  const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+  const link = document.createElement("a");
+  const url = URL.createObjectURL(blob);
+  link.setAttribute("href", url);
+  link.setAttribute("download", filename);
+  link.style.visibility = "hidden";
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};
+
 // ==================== JOB PROFILES COMPONENT ====================
 export const JobProfiles = () => {
   const [jobProfiles, setJobProfiles] = useState<any[]>([]);
@@ -1258,31 +1342,62 @@ export const JobProfiles = () => {
             Job Seeker Profiles
           </h2>
 
-          <div style={{ position: "relative" }}>
-            <Search
-              size={18}
-              color={theme.colors.textSecondary}
-              style={{
-                position: "absolute",
-                left: "12px",
-                top: "50%",
-                transform: "translateY(-50%)",
+          <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
+            <div style={{ position: "relative" }}>
+              <Search
+                size={18}
+                color={theme.colors.textSecondary}
+                style={{
+                  position: "absolute",
+                  left: "12px",
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                }}
+              />
+              <input
+                type="text"
+                placeholder="Search by name, email, phone, city..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                style={{
+                  padding: "10px 16px 10px 40px",
+                  borderRadius: "8px",
+                  border: `1px solid ${theme.colors.border}`,
+                  fontSize: "14px",
+                  width: "300px",
+                  outline: "none",
+                }}
+              />
+            </div>
+            <button
+              onClick={() => {
+                const timestamp = new Date().toISOString().split('T')[0];
+                exportToCSV(filteredProfiles, `job-profiles-${timestamp}.csv`);
               }}
-            />
-            <input
-              type="text"
-              placeholder="Search by name, email, phone, city..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
               style={{
-                padding: "10px 16px 10px 40px",
+                padding: "10px 16px",
+                background: theme.colors.success,
+                color: "white",
+                border: "none",
                 borderRadius: "8px",
-                border: `1px solid ${theme.colors.border}`,
                 fontSize: "14px",
-                width: "300px",
-                outline: "none",
+                fontWeight: "600",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                gap: "6px",
+                transition: "all 0.2s",
               }}
-            />
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = "#059669";
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = theme.colors.success;
+              }}
+            >
+              <Download size={16} />
+              Export CSV
+            </button>
           </div>
         </div>
 

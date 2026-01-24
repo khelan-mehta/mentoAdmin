@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { iconMap } from "./iconMap";
 import { BASE_URL } from "./Constants";
+import { Pagination } from "./Pagination";
 const API_BASE_URL = BASE_URL;
 
 // ==================== CONSTANTS ====================
@@ -448,6 +449,8 @@ export const Services = () => {
     new Set()
   );
   const [searchQuery, setSearchQuery] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(20);
 
   // Modal states
   const [showCategoryModal, setShowCategoryModal] = useState(false);
@@ -593,6 +596,22 @@ export const Services = () => {
       )
   );
 
+  // Pagination logic
+  const totalPages = Math.ceil(filteredCategories.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedCategories = filteredCategories.slice(startIndex, endIndex);
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handleItemsPerPageChange = (newItemsPerPage: number) => {
+    setItemsPerPage(newItemsPerPage);
+    setCurrentPage(1);
+  };
+
   return (
     <div style={{ padding: "24px" }}>
       <div
@@ -708,7 +727,7 @@ export const Services = () => {
           <div
             style={{ display: "flex", flexDirection: "column", gap: "12px" }}
           >
-            {filteredCategories.map((category: any) => (
+            {paginatedCategories.map((category: any) => (
               <div
                 key={category.id}
                 style={{
@@ -1005,6 +1024,17 @@ export const Services = () => {
               </div>
             ))}
           </div>
+        )}
+
+        {!loading && filteredCategories.length > 0 && (
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            itemsPerPage={itemsPerPage}
+            totalItems={filteredCategories.length}
+            onPageChange={handlePageChange}
+            onItemsPerPageChange={handleItemsPerPageChange}
+          />
         )}
       </div>
 
