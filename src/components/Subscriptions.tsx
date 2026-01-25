@@ -382,7 +382,7 @@ export const Subscriptions = () => {
   const [selectedSubscription, setSelectedSubscription] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(20);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
   const [stats, setStats] = useState({
     total: 0,
     free: 0,

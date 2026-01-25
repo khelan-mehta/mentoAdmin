@@ -292,7 +292,9 @@ const UserEditModal = ({ user, onClose, onSave, isLoading }: any) => {
               <input
                 type="checkbox"
                 checked={formData.is_active}
-                onChange={(e) => handleInputChange("is_active", e.target.checked)}
+                onChange={(e) =>
+                  handleInputChange("is_active", e.target.checked)
+                }
                 style={{ cursor: "pointer" }}
               />
               <span style={{ fontSize: "14px", color: theme.colors.text }}>
@@ -490,8 +492,25 @@ const formatDate = (dateValue: any): string => {
   if (!dateValue) return "N/A";
 
   try {
-    // Handle MongoDB date format
-    const timestamp = dateValue.$date?.$numberLong || dateValue.$date || dateValue;
+    let timestamp: number;
+
+    // Handle MongoDB date format: { "$date": { "$numberLong": "1768228725198" } }
+    if (dateValue.$date?.$numberLong) {
+      timestamp = parseInt(dateValue.$date.$numberLong, 10);
+    }
+    // Handle: { "$date": 1768228725198 }
+    else if (dateValue.$date) {
+      timestamp =
+        typeof dateValue.$date === "string"
+          ? parseInt(dateValue.$date, 10)
+          : dateValue.$date;
+    }
+    // Handle direct timestamp or date string
+    else {
+      timestamp =
+        typeof dateValue === "string" ? parseInt(dateValue, 10) : dateValue;
+    }
+
     const date = new Date(timestamp);
 
     // Check if date is valid
@@ -509,14 +528,14 @@ export const Users = () => {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [filterActive, setFilterActive] = useState<"all" | "active" | "inactive">(
-    "all"
-  );
+  const [filterActive, setFilterActive] = useState<
+    "all" | "active" | "inactive"
+  >("all");
   const [selectedUser, setSelectedUser] = useState<any>(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<any>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(20);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
 
   const fetchUsers = async () => {
     try {
@@ -532,7 +551,7 @@ export const Users = () => {
           headers: {
             Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
           },
-        }
+        },
       );
       if (response.ok) {
         const data = await response.json();
@@ -701,9 +720,13 @@ export const Users = () => {
                 borderRadius: "8px",
                 border: "none",
                 background:
-                  filterActive === tab.key ? theme.colors.primary : "transparent",
+                  filterActive === tab.key
+                    ? theme.colors.primary
+                    : "transparent",
                 color:
-                  filterActive === tab.key ? "white" : theme.colors.textSecondary,
+                  filterActive === tab.key
+                    ? "white"
+                    : theme.colors.textSecondary,
                 fontSize: "14px",
                 fontWeight: "600",
                 cursor: "pointer",
@@ -748,25 +771,32 @@ export const Users = () => {
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
                 <tr>
-                  {["Name", "Mobile", "Email", "Location", "KYC Status", "Status", "Joined", "Actions"].map(
-                    (header) => (
-                      <th
-                        key={header}
-                        style={{
-                          textAlign: "left",
-                          padding: "12px 16px",
-                          fontSize: "12px",
-                          fontWeight: "600",
-                          color: theme.colors.textSecondary,
-                          textTransform: "uppercase",
-                          borderBottom: `1px solid ${theme.colors.border}`,
-                          background: theme.colors.background,
-                        }}
-                      >
-                        {header}
-                      </th>
-                    )
-                  )}
+                  {[
+                    "Name",
+                    "Mobile",
+                    "Email",
+                    "Location",
+                    "KYC Status",
+                    "Status",
+                    "Joined",
+                    "Actions",
+                  ].map((header) => (
+                    <th
+                      key={header}
+                      style={{
+                        textAlign: "left",
+                        padding: "12px 16px",
+                        fontSize: "12px",
+                        fontWeight: "600",
+                        color: theme.colors.textSecondary,
+                        textTransform: "uppercase",
+                        borderBottom: `1px solid ${theme.colors.border}`,
+                        background: theme.colors.background,
+                      }}
+                    >
+                      {header}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
@@ -778,14 +808,21 @@ export const Users = () => {
                       transition: "background 0.2s",
                     }}
                     onMouseEnter={(e) =>
-                      (e.currentTarget.style.background = theme.colors.background)
+                      (e.currentTarget.style.background =
+                        theme.colors.background)
                     }
                     onMouseLeave={(e) =>
                       (e.currentTarget.style.background = "transparent")
                     }
                   >
                     <td style={{ padding: "16px" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                      <div
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "12px",
+                        }}
+                      >
                         <div
                           style={{
                             width: "36px",
@@ -800,9 +837,16 @@ export const Users = () => {
                             fontWeight: "700",
                           }}
                         >
-                          {(user.name || user.mobile || "U").charAt(0).toUpperCase()}
+                          {(user.name || user.mobile || "U")
+                            .charAt(0)
+                            .toUpperCase()}
                         </div>
-                        <span style={{ fontWeight: "600", color: theme.colors.text }}>
+                        <span
+                          style={{
+                            fontWeight: "600",
+                            color: theme.colors.text,
+                          }}
+                        >
                           {user.name || "N/A"}
                         </span>
                       </div>
@@ -816,10 +860,20 @@ export const Users = () => {
                     >
                       {user.mobile}
                     </td>
-                    <td style={{ padding: "16px", color: theme.colors.textSecondary }}>
+                    <td
+                      style={{
+                        padding: "16px",
+                        color: theme.colors.textSecondary,
+                      }}
+                    >
                       {user.email || "N/A"}
                     </td>
-                    <td style={{ padding: "16px", color: theme.colors.textSecondary }}>
+                    <td
+                      style={{
+                        padding: "16px",
+                        color: theme.colors.textSecondary,
+                      }}
+                    >
                       {user.city && user.pincode
                         ? `${user.city}, ${user.pincode}`
                         : user.city || user.pincode || "N/A"}
@@ -838,14 +892,14 @@ export const Users = () => {
                             user.kyc_status === "approved"
                               ? "#D1FAE5"
                               : user.kyc_status === "rejected"
-                              ? "#FEE2E2"
-                              : "#FEF3C7",
+                                ? "#FEE2E2"
+                                : "#FEF3C7",
                           color:
                             user.kyc_status === "approved"
                               ? theme.colors.success
                               : user.kyc_status === "rejected"
-                              ? theme.colors.danger
-                              : theme.colors.warning,
+                                ? theme.colors.danger
+                                : theme.colors.warning,
                           textTransform: "capitalize",
                         }}
                       >

@@ -377,7 +377,7 @@ export const KYC = () => {
   const [selectedKyc, setSelectedKyc] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(20);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
 
   const fetchWorkers = async () => {
     try {

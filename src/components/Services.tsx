@@ -450,7 +450,7 @@ export const Services = () => {
   );
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(20);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
 
   // Modal states
   const [showCategoryModal, setShowCategoryModal] = useState(false);
