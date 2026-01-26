@@ -177,10 +177,10 @@ export const authFetch = async (
 ): Promise<Response> => {
   const accessToken = getAccessToken();
 
-  const headers: HeadersInit = {
-    ...options.headers,
-    Authorization: `Bearer ${accessToken || ""}`,
-  };
+  const headers = new Headers(options.headers as HeadersInit);
+  if (accessToken) {
+    headers.set("Authorization", `Bearer ${accessToken}`);
+  }
 
   let response = await fetch(url, { ...options, headers });
 
@@ -190,7 +190,11 @@ export const authFetch = async (
 
     if (refreshed) {
       const newAccessToken = getAccessToken();
-      headers.Authorization = `Bearer ${newAccessToken || ""}`;
+      if (newAccessToken) {
+        headers.set("Authorization", `Bearer ${newAccessToken}`);
+      } else {
+        headers.delete("Authorization");
+      }
       response = await fetch(url, { ...options, headers });
     } else {
       // Refresh failed, logout
