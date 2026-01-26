@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Star,
   Users,
@@ -103,7 +103,14 @@ const SubscriptionDetailModal = ({ subscription, onClose }: any) => {
             zIndex: 10,
           }}
         >
-          <h2 style={{ margin: 0, fontSize: "18px", fontWeight: "700", color: theme.colors.text }}>
+          <h2
+            style={{
+              margin: 0,
+              fontSize: "18px",
+              fontWeight: "700",
+              color: theme.colors.text,
+            }}
+          >
             Subscription Details
           </h2>
           <button
@@ -121,8 +128,17 @@ const SubscriptionDetailModal = ({ subscription, onClose }: any) => {
 
         <div style={{ padding: "24px" }}>
           {/* Header */}
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "24px" }}>
-            <div style={{ display: "flex", gap: "16px", alignItems: "flex-start" }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "flex-start",
+              marginBottom: "24px",
+            }}
+          >
+            <div
+              style={{ display: "flex", gap: "16px", alignItems: "flex-start" }}
+            >
               {profilePhotoUrl ? (
                 <img
                   src={profilePhotoUrl}
@@ -150,39 +166,100 @@ const SubscriptionDetailModal = ({ subscription, onClose }: any) => {
                     fontWeight: "700",
                   }}
                 >
-                  {subscription.full_name?.charAt(0) || subscription.name?.charAt(0) || "?"}
+                  {subscription.full_name?.charAt(0) ||
+                    subscription.name?.charAt(0) ||
+                    "?"}
                 </div>
               )}
               <div>
-                <h3 style={{ margin: 0, fontSize: "20px", fontWeight: "700", color: theme.colors.text }}>
+                <h3
+                  style={{
+                    margin: 0,
+                    fontSize: "20px",
+                    fontWeight: "700",
+                    color: theme.colors.text,
+                  }}
+                >
                   {subscription.full_name || subscription.name}
                 </h3>
-                <p style={{ margin: "4px 0 0", color: theme.colors.primary, fontSize: "14px", fontWeight: "500" }}>
+                <p
+                  style={{
+                    margin: "4px 0 0",
+                    color: theme.colors.primary,
+                    fontSize: "14px",
+                    fontWeight: "500",
+                  }}
+                >
                   {subscription.headline || subscription.category || "N/A"}
                 </p>
                 {/* Contact Information */}
-                <div style={{ marginTop: "8px", display: "flex", flexDirection: "column", gap: "4px" }}>
+                <div
+                  style={{
+                    marginTop: "8px",
+                    display: "flex",
+                    flexDirection: "column",
+                    gap: "4px",
+                  }}
+                >
                   {subscription.user_mobile && (
-                    <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", color: theme.colors.textSecondary }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        fontSize: "13px",
+                        color: theme.colors.textSecondary,
+                      }}
+                    >
                       <PhoneCall size={14} color={theme.colors.primary} />
-                      <a href={`tel:${subscription.user_mobile}`} style={{ color: theme.colors.text, textDecoration: "none" }}>
+                      <a
+                        href={`tel:${subscription.user_mobile}`}
+                        style={{
+                          color: theme.colors.text,
+                          textDecoration: "none",
+                        }}
+                      >
                         {subscription.user_mobile}
                       </a>
                     </div>
                   )}
                   {subscription.user_email && (
-                    <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", color: theme.colors.textSecondary }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        fontSize: "13px",
+                        color: theme.colors.textSecondary,
+                      }}
+                    >
                       <Mail size={14} color={theme.colors.primary} />
-                      <a href={`mailto:${subscription.user_email}`} style={{ color: theme.colors.text, textDecoration: "none" }}>
+                      <a
+                        href={`mailto:${subscription.user_email}`}
+                        style={{
+                          color: theme.colors.text,
+                          textDecoration: "none",
+                        }}
+                      >
                         {subscription.user_email}
                       </a>
                     </div>
                   )}
                   {(subscription.user_city || subscription.user_pincode) && (
-                    <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", color: theme.colors.textSecondary }}>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "6px",
+                        fontSize: "13px",
+                        color: theme.colors.textSecondary,
+                      }}
+                    >
                       <MapPin size={14} color={theme.colors.primary} />
                       <span style={{ color: theme.colors.text }}>
-                        {[subscription.user_city, subscription.user_pincode].filter(Boolean).join(" - ")}
+                        {[subscription.user_city, subscription.user_pincode]
+                          .filter(Boolean)
+                          .join(" - ")}
                       </span>
                     </div>
                   )}
@@ -197,12 +274,24 @@ const SubscriptionDetailModal = ({ subscription, onClose }: any) => {
                     borderRadius: "12px",
                     fontSize: "12px",
                     fontWeight: "600",
-                    background: subscription.userType === "job_seeker" ? "#DBEAFE" : "#D1FAE5",
-                    color: subscription.userType === "job_seeker" ? "#3B82F6" : "#10B981",
+                    background:
+                      subscription.userType === "job_seeker"
+                        ? "#DBEAFE"
+                        : "#D1FAE5",
+                    color:
+                      subscription.userType === "job_seeker"
+                        ? "#3B82F6"
+                        : "#10B981",
                   }}
                 >
-                  {subscription.userType === "job_seeker" ? <Briefcase size={12} /> : <Users size={12} />}
-                  {subscription.userType === "job_seeker" ? "Job Seeker" : "Worker"}
+                  {subscription.userType === "job_seeker" ? (
+                    <Briefcase size={12} />
+                  ) : (
+                    <Users size={12} />
+                  )}
+                  {subscription.userType === "job_seeker"
+                    ? "Job Seeker"
+                    : "Worker"}
                 </span>
               </div>
             </div>
@@ -218,8 +307,16 @@ const SubscriptionDetailModal = ({ subscription, onClose }: any) => {
               border: `2px solid ${config.color}20`,
             }}
           >
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+              }}
+            >
+              <div
+                style={{ display: "flex", alignItems: "center", gap: "12px" }}
+              >
                 <div
                   style={{
                     width: "48px",
@@ -234,14 +331,38 @@ const SubscriptionDetailModal = ({ subscription, onClose }: any) => {
                   <IconComponent size={24} color="white" />
                 </div>
                 <div>
-                  <p style={{ margin: 0, fontSize: "12px", color: theme.colors.textSecondary }}>Current Plan</p>
-                  <p style={{ margin: "4px 0 0", fontSize: "20px", fontWeight: "700", color: config.color, textTransform: "capitalize" }}>
+                  <p
+                    style={{
+                      margin: 0,
+                      fontSize: "12px",
+                      color: theme.colors.textSecondary,
+                    }}
+                  >
+                    Current Plan
+                  </p>
+                  <p
+                    style={{
+                      margin: "4px 0 0",
+                      fontSize: "20px",
+                      fontWeight: "700",
+                      color: config.color,
+                      textTransform: "capitalize",
+                    }}
+                  >
                     {subscription.subscription_plan || "Free"}
                   </p>
                 </div>
               </div>
               <div style={{ textAlign: "right" }}>
-                <p style={{ margin: 0, fontSize: "12px", color: theme.colors.textSecondary }}>Status</p>
+                <p
+                  style={{
+                    margin: 0,
+                    fontSize: "12px",
+                    color: theme.colors.textSecondary,
+                  }}
+                >
+                  Status
+                </p>
                 <span
                   style={{
                     display: "inline-block",
@@ -270,72 +391,230 @@ const SubscriptionDetailModal = ({ subscription, onClose }: any) => {
             }}
           >
             {subscription.experience_years !== undefined && (
-              <div style={{ padding: "16px", background: theme.colors.background, borderRadius: "8px" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+              <div
+                style={{
+                  padding: "16px",
+                  background: theme.colors.background,
+                  borderRadius: "8px",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    marginBottom: "8px",
+                  }}
+                >
                   <TrendingUp size={16} color={theme.colors.textSecondary} />
-                  <span style={{ fontSize: "12px", color: theme.colors.textSecondary }}>Experience</span>
+                  <span
+                    style={{
+                      fontSize: "12px",
+                      color: theme.colors.textSecondary,
+                    }}
+                  >
+                    Experience
+                  </span>
                 </div>
-                <p style={{ margin: 0, fontWeight: "600", color: theme.colors.text }}>
+                <p
+                  style={{
+                    margin: 0,
+                    fontWeight: "600",
+                    color: theme.colors.text,
+                  }}
+                >
                   {subscription.experience_years} years
                 </p>
               </div>
             )}
 
-            {subscription.preferred_locations && subscription.preferred_locations.length > 0 && (
-              <div style={{ padding: "16px", background: theme.colors.background, borderRadius: "8px" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
-                  <MapPin size={16} color={theme.colors.textSecondary} />
-                  <span style={{ fontSize: "12px", color: theme.colors.textSecondary }}>Location</span>
+            {subscription.preferred_locations &&
+              subscription.preferred_locations.length > 0 && (
+                <div
+                  style={{
+                    padding: "16px",
+                    background: theme.colors.background,
+                    borderRadius: "8px",
+                  }}
+                >
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                      marginBottom: "8px",
+                    }}
+                  >
+                    <MapPin size={16} color={theme.colors.textSecondary} />
+                    <span
+                      style={{
+                        fontSize: "12px",
+                        color: theme.colors.textSecondary,
+                      }}
+                    >
+                      Location
+                    </span>
+                  </div>
+                  <p
+                    style={{
+                      margin: 0,
+                      fontWeight: "600",
+                      color: theme.colors.text,
+                    }}
+                  >
+                    {subscription.preferred_locations[0]}
+                  </p>
                 </div>
-                <p style={{ margin: 0, fontWeight: "600", color: theme.colors.text }}>
-                  {subscription.preferred_locations[0]}
-                </p>
-              </div>
-            )}
+              )}
 
             {subscription.profile_views !== undefined && (
-              <div style={{ padding: "16px", background: theme.colors.background, borderRadius: "8px" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+              <div
+                style={{
+                  padding: "16px",
+                  background: theme.colors.background,
+                  borderRadius: "8px",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    marginBottom: "8px",
+                  }}
+                >
                   <Eye size={16} color={theme.colors.textSecondary} />
-                  <span style={{ fontSize: "12px", color: theme.colors.textSecondary }}>Profile Views</span>
+                  <span
+                    style={{
+                      fontSize: "12px",
+                      color: theme.colors.textSecondary,
+                    }}
+                  >
+                    Profile Views
+                  </span>
                 </div>
-                <p style={{ margin: 0, fontWeight: "600", color: theme.colors.text }}>
+                <p
+                  style={{
+                    margin: 0,
+                    fontWeight: "600",
+                    color: theme.colors.text,
+                  }}
+                >
                   {subscription.profile_views}
                 </p>
               </div>
             )}
 
             {subscription.jobs !== undefined && (
-              <div style={{ padding: "16px", background: theme.colors.background, borderRadius: "8px" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+              <div
+                style={{
+                  padding: "16px",
+                  background: theme.colors.background,
+                  borderRadius: "8px",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    marginBottom: "8px",
+                  }}
+                >
                   <Briefcase size={16} color={theme.colors.textSecondary} />
-                  <span style={{ fontSize: "12px", color: theme.colors.textSecondary }}>Jobs Completed</span>
+                  <span
+                    style={{
+                      fontSize: "12px",
+                      color: theme.colors.textSecondary,
+                    }}
+                  >
+                    Jobs Completed
+                  </span>
                 </div>
-                <p style={{ margin: 0, fontWeight: "600", color: theme.colors.text }}>
+                <p
+                  style={{
+                    margin: 0,
+                    fontWeight: "600",
+                    color: theme.colors.text,
+                  }}
+                >
                   {subscription.jobs}
                 </p>
               </div>
             )}
 
             {subscription.rating !== undefined && (
-              <div style={{ padding: "16px", background: theme.colors.background, borderRadius: "8px" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+              <div
+                style={{
+                  padding: "16px",
+                  background: theme.colors.background,
+                  borderRadius: "8px",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    marginBottom: "8px",
+                  }}
+                >
                   <Star size={16} color={theme.colors.textSecondary} />
-                  <span style={{ fontSize: "12px", color: theme.colors.textSecondary }}>Rating</span>
+                  <span
+                    style={{
+                      fontSize: "12px",
+                      color: theme.colors.textSecondary,
+                    }}
+                  >
+                    Rating
+                  </span>
                 </div>
-                <p style={{ margin: 0, fontWeight: "600", color: theme.colors.text }}>
+                <p
+                  style={{
+                    margin: 0,
+                    fontWeight: "600",
+                    color: theme.colors.text,
+                  }}
+                >
                   {subscription.rating} / 5.0
                 </p>
               </div>
             )}
 
             {subscription.user_kyc_status && (
-              <div style={{ padding: "16px", background: theme.colors.background, borderRadius: "8px" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+              <div
+                style={{
+                  padding: "16px",
+                  background: theme.colors.background,
+                  borderRadius: "8px",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    marginBottom: "8px",
+                  }}
+                >
                   <Shield size={16} color={theme.colors.textSecondary} />
-                  <span style={{ fontSize: "12px", color: theme.colors.textSecondary }}>KYC Status</span>
+                  <span
+                    style={{
+                      fontSize: "12px",
+                      color: theme.colors.textSecondary,
+                    }}
+                  >
+                    KYC Status
+                  </span>
                 </div>
-                <p style={{ margin: 0, fontWeight: "600", color: theme.colors.text, textTransform: "capitalize" }}>
+                <p
+                  style={{
+                    margin: 0,
+                    fontWeight: "600",
+                    color: theme.colors.text,
+                    textTransform: "capitalize",
+                  }}
+                >
                   {subscription.user_kyc_status}
                 </p>
               </div>
@@ -345,7 +624,14 @@ const SubscriptionDetailModal = ({ subscription, onClose }: any) => {
           {/* Skills */}
           {subscription.skills && subscription.skills.length > 0 && (
             <div style={{ marginBottom: "24px" }}>
-              <h4 style={{ margin: "0 0 12px", fontSize: "14px", fontWeight: "600", color: theme.colors.text }}>
+              <h4
+                style={{
+                  margin: "0 0 12px",
+                  fontSize: "14px",
+                  fontWeight: "600",
+                  color: theme.colors.text,
+                }}
+              >
                 Skills
               </h4>
               <div style={{ display: "flex", flexWrap: "wrap", gap: "8px" }}>
@@ -377,14 +663,14 @@ const SubscriptionDetailModal = ({ subscription, onClose }: any) => {
 export const Subscriptions = () => {
   const [subscriptions, setSubscriptions] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeView, setActiveView] = useState<"all" | "job_seeker" | "worker">("all");
+  const [activeView, setActiveView] = useState<"all" | "job_seeker" | "worker">(
+    "all",
+  );
   const [planFilter, setPlanFilter] = useState<string>("all");
   const [selectedSubscription, setSelectedSubscription] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
-  const [totalItems, setTotalItems] = useState(0);
-  const [totalPages, setTotalPages] = useState(0);
   const [stats, setStats] = useState({
     total: 0,
     free: 0,
@@ -401,9 +687,9 @@ export const Subscriptions = () => {
         `${API_BASE_URL}/admin/users/${userId}`,
         {
           headers: {
-            "Authorization": `Bearer ${localStorage.getItem("accessToken") || localStorage.getItem("token") || ""}`,
+            Authorization: `Bearer ${localStorage.getItem("accessToken") || localStorage.getItem("token") || ""}`,
           },
-        }
+        },
       );
       if (userResponse.ok) {
         const userData = await userResponse.json();
@@ -430,20 +716,18 @@ export const Subscriptions = () => {
       setLoading(true);
       const allSubscriptions: any[] = [];
 
-      const params = new URLSearchParams();
-      params.append("page", currentPage.toString());
-      params.append("limit", itemsPerPage.toString());
-
-      // Fetch job seekers
-      const jobSeekersResponse = await fetch(`${API_BASE_URL}/admin/job-seekers?${params.toString()}`, {
-        headers: {
-          "Authorization": `Bearer ${localStorage.getItem("accessToken") || localStorage.getItem("token") || ""}`,
+      // Fetch ALL job seekers (no pagination params - we'll paginate client-side)
+      const jobSeekersResponse = await fetch(
+        `${API_BASE_URL}/admin/job-seekers?limit=1000`,
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("accessToken") || localStorage.getItem("token") || ""}`,
+          },
         },
-      });
+      );
       if (jobSeekersResponse.ok) {
         const data = await jobSeekersResponse.json();
         const profiles = data.data?.profiles || [];
-        const pagination = data.data?.pagination;
 
         // Fetch user data for each job seeker
         const profilesWithUserData = await Promise.all(
@@ -457,22 +741,20 @@ export const Subscriptions = () => {
               userType: "job_seeker",
               subscription_plan: profile.subscription_plan || "free",
             };
-          })
+          }),
         );
         allSubscriptions.push(...profilesWithUserData);
-
-        if (pagination) {
-          setTotalItems(pagination.total || 0);
-          setTotalPages(pagination.pages || 0);
-        }
       }
 
-      // Fetch workers
-      const workersResponse = await fetch(`${API_BASE_URL}/admin/workers?${params.toString()}`, {
-        headers: {
-          "Authorization": `Bearer ${localStorage.getItem("accessToken") || localStorage.getItem("token") || ""}`,
+      // Fetch ALL workers (no pagination params - we'll paginate client-side)
+      const workersResponse = await fetch(
+        `${API_BASE_URL}/admin/workers?limit=1000`,
+        {
+          headers: {
+            Authorization: `Bearer ${localStorage.getItem("accessToken") || localStorage.getItem("token") || ""}`,
+          },
         },
-      });
+      );
       if (workersResponse.ok) {
         const data = await workersResponse.json();
         const workers = data.data?.workers || [];
@@ -489,7 +771,7 @@ export const Subscriptions = () => {
               userType: "worker",
               subscription_plan: worker.subscription_plan || "free",
             };
-          })
+          }),
         );
         allSubscriptions.push(...workersWithUserData);
       }
@@ -521,25 +803,51 @@ export const Subscriptions = () => {
     }
   };
 
+  // Fetch data only once on mount
   useEffect(() => {
     fetchSubscriptions();
-  }, [currentPage, itemsPerPage]);
+  }, []);
 
-  const filteredSubscriptions = subscriptions.filter((sub) => {
-    const matchesSearch =
-      (sub.full_name || sub.name || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (sub.headline || sub.category || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (sub.user_mobile || "").includes(searchQuery) ||
-      (sub.user_email || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (sub.user_city || "").toLowerCase().includes(searchQuery.toLowerCase());
+  // Filter subscriptions based on search, view, and plan filters
+  const filteredSubscriptions = useMemo(() => {
+    return subscriptions.filter((sub) => {
+      const matchesSearch =
+        (sub.full_name || sub.name || "")
+          .toLowerCase()
+          .includes(searchQuery.toLowerCase()) ||
+        (sub.headline || sub.category || "")
+          .toLowerCase()
+          .includes(searchQuery.toLowerCase()) ||
+        (sub.user_mobile || "").includes(searchQuery) ||
+        (sub.user_email || "")
+          .toLowerCase()
+          .includes(searchQuery.toLowerCase()) ||
+        (sub.user_city || "").toLowerCase().includes(searchQuery.toLowerCase());
 
-    const matchesView = activeView === "all" || sub.userType === activeView;
+      const matchesView = activeView === "all" || sub.userType === activeView;
 
-    const subPlan = (sub.subscription_plan || "free").toLowerCase();
-    const matchesPlan = planFilter === "all" || subPlan === planFilter;
+      const subPlan = (sub.subscription_plan || "free").toLowerCase();
+      const matchesPlan = planFilter === "all" || subPlan === planFilter;
 
-    return matchesSearch && matchesView && matchesPlan;
-  });
+      return matchesSearch && matchesView && matchesPlan;
+    });
+  }, [subscriptions, searchQuery, activeView, planFilter]);
+
+  // Calculate pagination values
+  const totalItems = filteredSubscriptions.length;
+  const totalPages = Math.ceil(totalItems / itemsPerPage);
+
+  // Get current page items
+  const paginatedSubscriptions = useMemo(() => {
+    const startIndex = (currentPage - 1) * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    return filteredSubscriptions.slice(startIndex, endIndex);
+  }, [filteredSubscriptions, currentPage, itemsPerPage]);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery, activeView, planFilter]);
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
@@ -589,12 +897,27 @@ export const Subscriptions = () => {
         }}
       >
         {[
-          { label: "Total Users", value: stats.total, color: theme.colors.primary, icon: Users },
+          {
+            label: "Total Users",
+            value: stats.total,
+            color: theme.colors.primary,
+            icon: Users,
+          },
           { label: "Free", value: stats.free, color: "#6B7280", icon: User },
           { label: "Basic", value: stats.basic, color: "#3B82F6", icon: Zap },
-          { label: "Premium", value: stats.premium, color: "#8B5CF6", icon: Crown },
+          {
+            label: "Premium",
+            value: stats.premium,
+            color: "#8B5CF6",
+            icon: Crown,
+          },
           { label: "Gold", value: stats.gold, color: "#F59E0B", icon: Crown },
-          { label: "Enterprise", value: stats.enterprise, color: "#10B981", icon: Shield },
+          {
+            label: "Enterprise",
+            value: stats.enterprise,
+            color: "#10B981",
+            icon: Shield,
+          },
         ].map((stat, index) => (
           <div
             key={index}
@@ -605,11 +928,29 @@ export const Subscriptions = () => {
               boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
             }}
           >
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "8px" }}>
-              <span style={{ fontSize: "13px", color: theme.colors.textSecondary }}>{stat.label}</span>
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                marginBottom: "8px",
+              }}
+            >
+              <span
+                style={{ fontSize: "13px", color: theme.colors.textSecondary }}
+              >
+                {stat.label}
+              </span>
               <stat.icon size={18} color={stat.color} />
             </div>
-            <p style={{ margin: 0, fontSize: "24px", fontWeight: "700", color: stat.color }}>
+            <p
+              style={{
+                margin: 0,
+                fontSize: "24px",
+                fontWeight: "700",
+                color: stat.color,
+              }}
+            >
               {stat.value}
             </p>
           </div>
@@ -673,7 +1014,12 @@ export const Subscriptions = () => {
               <Search
                 size={18}
                 color={theme.colors.textSecondary}
-                style={{ position: "absolute", left: "12px", top: "50%", transform: "translateY(-50%)" }}
+                style={{
+                  position: "absolute",
+                  left: "12px",
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                }}
               />
               <input
                 type="text"
@@ -715,8 +1061,10 @@ export const Subscriptions = () => {
                 padding: "8px 16px",
                 borderRadius: "8px",
                 border: "none",
-                background: activeView === tab.key ? theme.colors.primary : "transparent",
-                color: activeView === tab.key ? "white" : theme.colors.textSecondary,
+                background:
+                  activeView === tab.key ? theme.colors.primary : "transparent",
+                color:
+                  activeView === tab.key ? "white" : theme.colors.textSecondary,
                 fontSize: "14px",
                 fontWeight: "600",
                 cursor: "pointer",
@@ -734,16 +1082,30 @@ export const Subscriptions = () => {
 
         {loading ? (
           <div style={{ textAlign: "center", padding: "40px" }}>
-            <Loader2 size={32} color={theme.colors.primary} style={{ animation: "spin 1s linear infinite" }} />
-            <p style={{ marginTop: "12px", color: theme.colors.textSecondary }}>Loading subscriptions...</p>
+            <Loader2
+              size={32}
+              color={theme.colors.primary}
+              style={{ animation: "spin 1s linear infinite" }}
+            />
+            <p style={{ marginTop: "12px", color: theme.colors.textSecondary }}>
+              Loading subscriptions...
+            </p>
             <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
           </div>
         ) : filteredSubscriptions.length === 0 ? (
           <div style={{ textAlign: "center", padding: "60px 20px" }}>
-            <Star size={48} color={theme.colors.border} style={{ marginBottom: "16px" }} />
-            <h3 style={{ margin: "0 0 8px", color: theme.colors.text }}>No Subscriptions Found</h3>
+            <Star
+              size={48}
+              color={theme.colors.border}
+              style={{ marginBottom: "16px" }}
+            />
+            <h3 style={{ margin: "0 0 8px", color: theme.colors.text }}>
+              No Subscriptions Found
+            </h3>
             <p style={{ margin: 0, color: theme.colors.textSecondary }}>
-              {searchQuery ? "No results match your search." : "There are no subscriptions to display."}
+              {searchQuery
+                ? "No results match your search."
+                : "There are no subscriptions to display."}
             </p>
           </div>
         ) : (
@@ -751,7 +1113,14 @@ export const Subscriptions = () => {
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead>
                 <tr>
-                  {["User", "Contact", "Type", "Plan", "Details", "Actions"].map((header) => (
+                  {[
+                    "User",
+                    "Contact",
+                    "Type",
+                    "Plan",
+                    "Details",
+                    "Actions",
+                  ].map((header) => (
                     <th
                       key={header}
                       style={{
@@ -771,9 +1140,9 @@ export const Subscriptions = () => {
                 </tr>
               </thead>
               <tbody>
-                {filteredSubscriptions.map((sub: any, index: number) => {
+                {paginatedSubscriptions.map((sub: any, index: number) => {
                   const profilePhotoUrl = getProfilePhotoUrl(sub.user_photo);
-                  
+
                   return (
                     <tr
                       key={sub.id || index}
@@ -781,11 +1150,22 @@ export const Subscriptions = () => {
                         borderBottom: `1px solid ${theme.colors.border}`,
                         transition: "background 0.2s",
                       }}
-                      onMouseEnter={(e) => (e.currentTarget.style.background = theme.colors.background)}
-                      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                      onMouseEnter={(e) =>
+                        (e.currentTarget.style.background =
+                          theme.colors.background)
+                      }
+                      onMouseLeave={(e) =>
+                        (e.currentTarget.style.background = "transparent")
+                      }
                     >
                       <td style={{ padding: "16px" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                        <div
+                          style={{
+                            display: "flex",
+                            alignItems: "center",
+                            gap: "12px",
+                          }}
+                        >
                           {profilePhotoUrl ? (
                             <img
                               src={profilePhotoUrl}
@@ -817,38 +1197,91 @@ export const Subscriptions = () => {
                             </div>
                           )}
                           <div>
-                            <div style={{ fontWeight: "600", color: theme.colors.text }}>
+                            <div
+                              style={{
+                                fontWeight: "600",
+                                color: theme.colors.text,
+                              }}
+                            >
                               {sub.full_name || sub.name}
                             </div>
-                            <div style={{ fontSize: "13px", color: theme.colors.textSecondary }}>
+                            <div
+                              style={{
+                                fontSize: "13px",
+                                color: theme.colors.textSecondary,
+                              }}
+                            >
                               {sub.headline || sub.category || "N/A"}
                             </div>
                           </div>
                         </div>
                       </td>
                       <td style={{ padding: "16px" }}>
-                        <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                        <div
+                          style={{
+                            display: "flex",
+                            flexDirection: "column",
+                            gap: "4px",
+                          }}
+                        >
                           {sub.user_mobile && (
-                            <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", color: theme.colors.textSecondary }}>
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "6px",
+                                fontSize: "12px",
+                                color: theme.colors.textSecondary,
+                              }}
+                            >
                               <PhoneCall size={12} />
                               {sub.user_mobile}
                             </div>
                           )}
                           {sub.user_email && (
-                            <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", color: theme.colors.textSecondary, maxWidth: "180px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "6px",
+                                fontSize: "12px",
+                                color: theme.colors.textSecondary,
+                                maxWidth: "180px",
+                                overflow: "hidden",
+                                textOverflow: "ellipsis",
+                                whiteSpace: "nowrap",
+                              }}
+                            >
                               <Mail size={12} style={{ flexShrink: 0 }} />
                               {sub.user_email}
                             </div>
                           )}
                           {sub.user_city && (
-                            <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", color: theme.colors.textSecondary }}>
+                            <div
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "6px",
+                                fontSize: "12px",
+                                color: theme.colors.textSecondary,
+                              }}
+                            >
                               <MapPin size={12} />
                               {sub.user_city}
                             </div>
                           )}
-                          {!sub.user_mobile && !sub.user_email && !sub.user_city && (
-                            <span style={{ fontSize: "12px", color: theme.colors.textSecondary }}>N/A</span>
-                          )}
+                          {!sub.user_mobile &&
+                            !sub.user_email &&
+                            !sub.user_city && (
+                              <span
+                                style={{
+                                  fontSize: "12px",
+                                  color: theme.colors.textSecondary,
+                                }}
+                              >
+                                N/A
+                              </span>
+                            )}
                         </div>
                       </td>
                       <td style={{ padding: "16px" }}>
@@ -861,27 +1294,63 @@ export const Subscriptions = () => {
                             borderRadius: "12px",
                             fontSize: "12px",
                             fontWeight: "600",
-                            background: sub.userType === "job_seeker" ? "#DBEAFE" : "#D1FAE5",
-                            color: sub.userType === "job_seeker" ? "#3B82F6" : "#10B981",
+                            background:
+                              sub.userType === "job_seeker"
+                                ? "#DBEAFE"
+                                : "#D1FAE5",
+                            color:
+                              sub.userType === "job_seeker"
+                                ? "#3B82F6"
+                                : "#10B981",
                           }}
                         >
-                          {sub.userType === "job_seeker" ? <Briefcase size={12} /> : <Users size={12} />}
-                          {sub.userType === "job_seeker" ? "Job Seeker" : "Worker"}
+                          {sub.userType === "job_seeker" ? (
+                            <Briefcase size={12} />
+                          ) : (
+                            <Users size={12} />
+                          )}
+                          {sub.userType === "job_seeker"
+                            ? "Job Seeker"
+                            : "Worker"}
                         </span>
                       </td>
                       <td style={{ padding: "16px" }}>
                         {getPlanBadge(sub.subscription_plan)}
                       </td>
-                      <td style={{ padding: "16px", color: theme.colors.textSecondary, fontSize: "13px" }}>
+                      <td
+                        style={{
+                          padding: "16px",
+                          color: theme.colors.textSecondary,
+                          fontSize: "13px",
+                        }}
+                      >
                         {sub.userType === "job_seeker" ? (
-                          <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-                            <span>{sub.experience_years ? `${sub.experience_years} yrs exp` : "N/A"}</span>
+                          <div
+                            style={{
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: "4px",
+                            }}
+                          >
+                            <span>
+                              {sub.experience_years
+                                ? `${sub.experience_years} yrs exp`
+                                : "N/A"}
+                            </span>
                             <span>{sub.profile_views || 0} profile views</span>
                           </div>
                         ) : (
-                          <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
+                          <div
+                            style={{
+                              display: "flex",
+                              flexDirection: "column",
+                              gap: "4px",
+                            }}
+                          >
                             <span>{sub.jobs || 0} jobs completed</span>
-                            <span>{sub.rating ? `${sub.rating} rating` : "N/A"}</span>
+                            <span>
+                              {sub.rating ? `${sub.rating} rating` : "N/A"}
+                            </span>
                           </div>
                         )}
                       </td>
@@ -917,9 +1386,9 @@ export const Subscriptions = () => {
         {!loading && filteredSubscriptions.length > 0 && (
           <Pagination
             currentPage={currentPage}
-            totalPages={totalPages || Math.ceil(totalItems / itemsPerPage)}
+            totalPages={totalPages}
             itemsPerPage={itemsPerPage}
-            totalItems={totalItems || filteredSubscriptions.length}
+            totalItems={totalItems}
             onPageChange={handlePageChange}
             onItemsPerPageChange={handleItemsPerPageChange}
           />
@@ -934,4 +1403,4 @@ export const Subscriptions = () => {
       )}
     </div>
   );
-}; 
+};
