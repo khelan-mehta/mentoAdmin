@@ -202,6 +202,11 @@ fn rocket() -> Rocket<Build> {
                 routes::notification::delete_notification,
                 routes::notification::get_unread_count,
                 routes::notification::create_notification,
+                // Admin Auth Routes
+                routes::admin_auth::admin_register,
+                routes::admin_auth::admin_login,
+                routes::admin_auth::admin_refresh_token,
+                routes::admin_auth::admin_me,
             ],
         )
         .mount("/uploads", FileServer::from("uploads"))

@@ -23,6 +23,7 @@ import {
   Hash,
   Download,
 } from "lucide-react";
+import { Pagination } from "./Pagination";
 
 // ==================== CONSTANTS ====================
 const theme = {
@@ -1178,18 +1179,33 @@ export const JobProfiles = () => {
   );
   const [selectedProfile, setSelectedProfile] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [totalItems, setTotalItems] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
 
   const fetchJobProfiles = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${API_BASE_URL}/admin/job-seekers`, {
+      const params = new URLSearchParams();
+      params.append("page", currentPage.toString());
+      params.append("limit", itemsPerPage.toString());
+      if (activeView === "verified") params.append("is_verified", "true");
+      if (activeView === "pending") params.append("is_verified", "false");
+
+      const response = await fetch(`${API_BASE_URL}/admin/job-seekers?${params.toString()}`, {
         headers: {
-          Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+          Authorization: `Bearer ${localStorage.getItem("accessToken") || localStorage.getItem("token") || ""}`,
         },
       });
       if (response.ok) {
         const data = await response.json();
         const profiles = data.data?.profiles || [];
+        const pagination = data.data?.pagination;
+        if (pagination) {
+          setTotalItems(pagination.total || 0);
+          setTotalPages(pagination.pages || 0);
+        }
 
         // Fetch user data for each profile to get contact number and profile pic
         const profilesWithUserData = await Promise.all(
@@ -1199,7 +1215,7 @@ export const JobProfiles = () => {
                 `${API_BASE_URL}/admin/users/${profile.user_id?.$oid || profile.user_id}`,
                 {
                   headers: {
-                    Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+                    Authorization: `Bearer ${localStorage.getItem("accessToken") || localStorage.getItem("token") || ""}`,
                   },
                 },
               );
@@ -1236,7 +1252,7 @@ export const JobProfiles = () => {
 
   useEffect(() => {
     fetchJobProfiles();
-  }, []);
+  }, [activeView, currentPage, itemsPerPage]);
 
   const handleApproveProfile = async (profileId: string) => {
     try {
@@ -1247,7 +1263,7 @@ export const JobProfiles = () => {
           method: "PUT",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+            Authorization: `Bearer ${localStorage.getItem("accessToken") || localStorage.getItem("token") || ""}`,
           },
           body: JSON.stringify({ is_verified: true }),
         },
@@ -1272,7 +1288,7 @@ export const JobProfiles = () => {
           method: "PUT",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+            Authorization: `Bearer ${localStorage.getItem("accessToken") || localStorage.getItem("token") || ""}`,
           },
           body: JSON.stringify({
             is_verified: false,
@@ -1291,7 +1307,19 @@ export const JobProfiles = () => {
     }
   };
 
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handleItemsPerPageChange = (newItemsPerPage: number) => {
+    setItemsPerPage(newItemsPerPage);
+    setCurrentPage(1);
+  };
+
+  // Filter profiles locally for search (search is client-side for now)
   const filteredProfiles = jobProfiles.filter((profile) => {
+    if (!searchQuery) return true;
     const matchesSearch =
       profile.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       profile.user_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -1303,12 +1331,7 @@ export const JobProfiles = () => {
         skill.toLowerCase().includes(searchQuery.toLowerCase()),
       );
 
-    const matchesView =
-      activeView === "all" ||
-      (activeView === "pending" && !profile.is_verified) ||
-      (activeView === "verified" && profile.is_verified);
-
-    return matchesSearch && matchesView;
+    return matchesSearch;
   });
 
   return (
@@ -1783,6 +1806,17 @@ export const JobProfiles = () => {
               );
             })}
           </div>
+        )}
+
+        {!loading && filteredProfiles.length > 0 && (
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages || Math.ceil(totalItems / itemsPerPage)}
+            itemsPerPage={itemsPerPage}
+            totalItems={totalItems}
+            onPageChange={handlePageChange}
+            onItemsPerPageChange={handleItemsPerPageChange}
+          />
         )}
       </div>
 

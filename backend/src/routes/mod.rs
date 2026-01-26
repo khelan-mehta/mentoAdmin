@@ -9,3 +9,4 @@ pub mod file_upload;
 pub mod service;
 pub mod admin;
 pub mod notification;
+pub mod admin_auth;

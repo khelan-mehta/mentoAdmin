@@ -1227,19 +1227,30 @@ export const Jobs = () => {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [totalItems, setTotalItems] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
 
   const fetchJobs = async () => {
     try {
       setLoading(true);
-      const statusParam = activeView !== "all" ? `?status=${activeView}` : "";
-      const response = await fetch(`${API_BASE_URL}/admin/jobs${statusParam}`, {
+      const params = new URLSearchParams();
+      params.append("page", currentPage.toString());
+      params.append("limit", itemsPerPage.toString());
+      if (activeView !== "all") params.append("status", activeView);
+
+      const response = await fetch(`${API_BASE_URL}/admin/jobs?${params.toString()}`, {
         headers: {
-          Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+          Authorization: `Bearer ${localStorage.getItem("accessToken") || localStorage.getItem("token") || ""}`,
         },
       });
       if (response.ok) {
         const data = await response.json();
         setJobs(data.data?.jobs || []);
+        const pagination = data.data?.pagination;
+        if (pagination) {
+          setTotalItems(pagination.total || 0);
+          setTotalPages(pagination.pages || 0);
+        }
       }
     } catch (error) {
       console.error("Error fetching jobs:", error);
@@ -1250,7 +1261,7 @@ export const Jobs = () => {
 
   useEffect(() => {
     fetchJobs();
-  }, [activeView]);
+  }, [activeView, currentPage, itemsPerPage]);
 
   const handleApproveJob = async (jobId: string) => {
     try {
@@ -1261,7 +1272,7 @@ export const Jobs = () => {
           method: "PUT",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+            Authorization: `Bearer ${localStorage.getItem("accessToken") || localStorage.getItem("token") || ""}`,
           },
           body: JSON.stringify({ status: "active" }),
         },
@@ -1286,7 +1297,7 @@ export const Jobs = () => {
           method: "PUT",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+            Authorization: `Bearer ${localStorage.getItem("accessToken") || localStorage.getItem("token") || ""}`,
           },
           body: JSON.stringify({
             status: "rejected",
@@ -1311,7 +1322,7 @@ export const Jobs = () => {
       const response = await fetch(`${API_BASE_URL}/admin/jobs/${jobId}`, {
         method: "DELETE",
         headers: {
-          Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+          Authorization: `Bearer ${localStorage.getItem("accessToken") || localStorage.getItem("token") || ""}`,
         },
       });
       if (response.ok) {
@@ -1332,7 +1343,7 @@ export const Jobs = () => {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+          Authorization: `Bearer ${localStorage.getItem("accessToken") || localStorage.getItem("token") || ""}`,
         },
         body: JSON.stringify(jobData),
       });
@@ -1353,12 +1364,6 @@ export const Jobs = () => {
       job.company?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       job.location?.toLowerCase().includes(searchQuery.toLowerCase()),
   );
-
-  // Pagination logic
-  const totalPages = Math.ceil(filteredJobs.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const paginatedJobs = filteredJobs.slice(startIndex, endIndex);
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
@@ -1579,7 +1584,7 @@ export const Jobs = () => {
                 </tr>
               </thead>
               <tbody>
-                {paginatedJobs.map((job: any, index: number) => {
+                {filteredJobs.map((job: any, index: number) => {
                   const statusConfig = getStatusConfig(job.status);
                   const StatusIcon = statusConfig.icon;
                   return (
@@ -1726,9 +1731,9 @@ export const Jobs = () => {
         {!loading && filteredJobs.length > 0 && (
           <Pagination
             currentPage={currentPage}
-            totalPages={totalPages}
+            totalPages={totalPages || Math.ceil(totalItems / itemsPerPage)}
             itemsPerPage={itemsPerPage}
-            totalItems={filteredJobs.length}
+            totalItems={totalItems}
             onPageChange={handlePageChange}
             onItemsPerPageChange={handleItemsPerPageChange}
           />

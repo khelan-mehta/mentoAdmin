@@ -383,6 +383,8 @@ export const Subscriptions = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [totalItems, setTotalItems] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
   const [stats, setStats] = useState({
     total: 0,
     free: 0,
@@ -399,7 +401,7 @@ export const Subscriptions = () => {
         `${API_BASE_URL}/admin/users/${userId}`,
         {
           headers: {
-            "Authorization": `Bearer ${localStorage.getItem("token") || ""}`,
+            "Authorization": `Bearer ${localStorage.getItem("accessToken") || localStorage.getItem("token") || ""}`,
           },
         }
       );
@@ -428,16 +430,21 @@ export const Subscriptions = () => {
       setLoading(true);
       const allSubscriptions: any[] = [];
 
+      const params = new URLSearchParams();
+      params.append("page", currentPage.toString());
+      params.append("limit", itemsPerPage.toString());
+
       // Fetch job seekers
-      const jobSeekersResponse = await fetch(`${API_BASE_URL}/admin/job-seekers`, {
+      const jobSeekersResponse = await fetch(`${API_BASE_URL}/admin/job-seekers?${params.toString()}`, {
         headers: {
-          "Authorization": `Bearer ${localStorage.getItem("token") || ""}`,
+          "Authorization": `Bearer ${localStorage.getItem("accessToken") || localStorage.getItem("token") || ""}`,
         },
       });
       if (jobSeekersResponse.ok) {
         const data = await jobSeekersResponse.json();
         const profiles = data.data?.profiles || [];
-        
+        const pagination = data.data?.pagination;
+
         // Fetch user data for each job seeker
         const profilesWithUserData = await Promise.all(
           profiles.map(async (profile: any) => {
@@ -453,18 +460,23 @@ export const Subscriptions = () => {
           })
         );
         allSubscriptions.push(...profilesWithUserData);
+
+        if (pagination) {
+          setTotalItems(pagination.total || 0);
+          setTotalPages(pagination.pages || 0);
+        }
       }
 
       // Fetch workers
-      const workersResponse = await fetch(`${API_BASE_URL}/admin/workers`, {
+      const workersResponse = await fetch(`${API_BASE_URL}/admin/workers?${params.toString()}`, {
         headers: {
-          "Authorization": `Bearer ${localStorage.getItem("token") || ""}`,
+          "Authorization": `Bearer ${localStorage.getItem("accessToken") || localStorage.getItem("token") || ""}`,
         },
       });
       if (workersResponse.ok) {
         const data = await workersResponse.json();
         const workers = data.data?.workers || [];
-        
+
         // Fetch user data for each worker
         const workersWithUserData = await Promise.all(
           workers.map(async (worker: any) => {
@@ -511,7 +523,7 @@ export const Subscriptions = () => {
 
   useEffect(() => {
     fetchSubscriptions();
-  }, []);
+  }, [currentPage, itemsPerPage]);
 
   const filteredSubscriptions = subscriptions.filter((sub) => {
     const matchesSearch =
@@ -528,12 +540,6 @@ export const Subscriptions = () => {
 
     return matchesSearch && matchesView && matchesPlan;
   });
-
-  // Pagination logic
-  const totalPages = Math.ceil(filteredSubscriptions.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const paginatedSubscriptions = filteredSubscriptions.slice(startIndex, endIndex);
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
@@ -765,7 +771,7 @@ export const Subscriptions = () => {
                 </tr>
               </thead>
               <tbody>
-                {paginatedSubscriptions.map((sub: any, index: number) => {
+                {filteredSubscriptions.map((sub: any, index: number) => {
                   const profilePhotoUrl = getProfilePhotoUrl(sub.user_photo);
                   
                   return (
@@ -911,9 +917,9 @@ export const Subscriptions = () => {
         {!loading && filteredSubscriptions.length > 0 && (
           <Pagination
             currentPage={currentPage}
-            totalPages={totalPages}
+            totalPages={totalPages || Math.ceil(totalItems / itemsPerPage)}
             itemsPerPage={itemsPerPage}
-            totalItems={filteredSubscriptions.length}
+            totalItems={totalItems || filteredSubscriptions.length}
             onPageChange={handlePageChange}
             onItemsPerPageChange={handleItemsPerPageChange}
           />

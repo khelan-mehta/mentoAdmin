@@ -536,11 +536,15 @@ export const Users = () => {
   const [deleteTarget, setDeleteTarget] = useState<any>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [totalItems, setTotalItems] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
 
   const fetchUsers = async () => {
     try {
       setLoading(true);
       const params = new URLSearchParams();
+      params.append("page", currentPage.toString());
+      params.append("limit", itemsPerPage.toString());
       if (filterActive === "active") params.append("is_active", "true");
       if (filterActive === "inactive") params.append("is_active", "false");
       if (searchQuery) params.append("search", searchQuery);
@@ -549,13 +553,18 @@ export const Users = () => {
         `${API_BASE_URL}/admin/users?${params.toString()}`,
         {
           headers: {
-            Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+            Authorization: `Bearer ${localStorage.getItem("accessToken") || localStorage.getItem("token") || ""}`,
           },
         },
       );
       if (response.ok) {
         const data = await response.json();
         setUsers(data.data?.users || []);
+        const pagination = data.data?.pagination;
+        if (pagination) {
+          setTotalItems(pagination.total || 0);
+          setTotalPages(pagination.pages || 0);
+        }
       }
     } catch (error) {
       console.error("Error fetching users:", error);
@@ -570,7 +579,7 @@ export const Users = () => {
     }, 300);
 
     return () => clearTimeout(timeoutId);
-  }, [searchQuery, filterActive]);
+  }, [searchQuery, filterActive, currentPage, itemsPerPage]);
 
   const handleSaveUser = async (userId: string, formData: any) => {
     try {
@@ -579,7 +588,7 @@ export const Users = () => {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+          Authorization: `Bearer ${localStorage.getItem("accessToken") || localStorage.getItem("token") || ""}`,
         },
         body: JSON.stringify(formData),
       });
@@ -604,7 +613,7 @@ export const Users = () => {
       const response = await fetch(`${API_BASE_URL}/admin/users/${userId}`, {
         method: "DELETE",
         headers: {
-          Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+          Authorization: `Bearer ${localStorage.getItem("accessToken") || localStorage.getItem("token") || ""}`,
         },
       });
 
@@ -619,12 +628,6 @@ export const Users = () => {
       setActionLoading(false);
     }
   };
-
-  // Pagination logic
-  const totalPages = Math.ceil(users.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const paginatedUsers = users.slice(startIndex, endIndex);
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
@@ -800,7 +803,7 @@ export const Users = () => {
                 </tr>
               </thead>
               <tbody>
-                {paginatedUsers.map((user: any, index: number) => (
+                {users.map((user: any, index: number) => (
                   <tr
                     key={user.id?.$oid || user._id?.$oid || index}
                     style={{
@@ -1001,9 +1004,9 @@ export const Users = () => {
         {!loading && users.length > 0 && (
           <Pagination
             currentPage={currentPage}
-            totalPages={totalPages}
+            totalPages={totalPages || Math.ceil(totalItems / itemsPerPage)}
             itemsPerPage={itemsPerPage}
-            totalItems={users.length}
+            totalItems={totalItems}
             onPageChange={handlePageChange}
             onItemsPerPageChange={handleItemsPerPageChange}
           />

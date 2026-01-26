@@ -520,11 +520,15 @@ export const WorkerProfiles = () => {
   const [deleteTarget, setDeleteTarget] = useState<any>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [totalItems, setTotalItems] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
 
   const fetchWorkers = async () => {
     try {
       setLoading(true);
       const params = new URLSearchParams();
+      params.append("page", currentPage.toString());
+      params.append("limit", itemsPerPage.toString());
       if (filterVerified === "verified") params.append("is_verified", "true");
       if (filterVerified === "unverified") params.append("is_verified", "false");
 
@@ -532,13 +536,18 @@ export const WorkerProfiles = () => {
         `${API_BASE_URL}/admin/workers?${params.toString()}`,
         {
           headers: {
-            Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+            Authorization: `Bearer ${localStorage.getItem("accessToken") || localStorage.getItem("token") || ""}`,
           },
         }
       );
       if (response.ok) {
         const data = await response.json();
         setWorkers(data.data?.workers || []);
+        const pagination = data.data?.pagination;
+        if (pagination) {
+          setTotalItems(pagination.total || 0);
+          setTotalPages(pagination.pages || 0);
+        }
       }
     } catch (error) {
       console.error("Error fetching workers:", error);
@@ -551,7 +560,7 @@ export const WorkerProfiles = () => {
     try {
       const response = await fetch(`${API_BASE_URL}/category/all`, {
         headers: {
-          Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+          Authorization: `Bearer ${localStorage.getItem("accessToken") || localStorage.getItem("token") || ""}`,
         },
       });
       if (response.ok) {
@@ -565,8 +574,11 @@ export const WorkerProfiles = () => {
 
   useEffect(() => {
     fetchWorkers();
+  }, [filterVerified, currentPage, itemsPerPage]);
+
+  useEffect(() => {
     fetchCategories();
-  }, [filterVerified]);
+  }, []);
 
   const handleSaveWorker = async (workerId: string, formData: any) => {
     try {
@@ -575,7 +587,7 @@ export const WorkerProfiles = () => {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+          Authorization: `Bearer ${localStorage.getItem("accessToken") || localStorage.getItem("token") || ""}`,
         },
         body: JSON.stringify(formData),
       });
@@ -600,7 +612,7 @@ export const WorkerProfiles = () => {
       const response = await fetch(`${API_BASE_URL}/admin/workers/${workerId}`, {
         method: "DELETE",
         headers: {
-          Authorization: `Bearer ${localStorage.getItem("token") || ""}`,
+          Authorization: `Bearer ${localStorage.getItem("accessToken") || localStorage.getItem("token") || ""}`,
         },
       });
 
@@ -616,6 +628,7 @@ export const WorkerProfiles = () => {
     }
   };
 
+  // Filter workers locally for search (search is client-side for now)
   const filteredWorkers = workers.filter((worker) => {
     if (!searchQuery) return true;
 
@@ -632,12 +645,6 @@ export const WorkerProfiles = () => {
 
     return matchesSearch;
   });
-
-  // Pagination logic
-  const totalPages = Math.ceil(filteredWorkers.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const paginatedWorkers = filteredWorkers.slice(startIndex, endIndex);
 
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
@@ -779,7 +786,7 @@ export const WorkerProfiles = () => {
               gap: "20px",
             }}
           >
-            {paginatedWorkers.map((worker: any, index: number) => (
+            {filteredWorkers.map((worker: any, index: number) => (
               <div
                 key={worker.id?.$oid || worker._id?.$oid || index}
                 style={{
@@ -1202,9 +1209,9 @@ export const WorkerProfiles = () => {
         {!loading && filteredWorkers.length > 0 && (
           <Pagination
             currentPage={currentPage}
-            totalPages={totalPages}
+            totalPages={totalPages || Math.ceil(totalItems / itemsPerPage)}
             itemsPerPage={itemsPerPage}
-            totalItems={filteredWorkers.length}
+            totalItems={totalItems}
             onPageChange={handlePageChange}
             onItemsPerPageChange={handleItemsPerPageChange}
           />

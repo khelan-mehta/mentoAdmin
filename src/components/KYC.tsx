@@ -378,12 +378,14 @@ export const KYC = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [totalItems, setTotalItems] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
 
   const fetchWorkers = async () => {
     try {
       const response = await fetch(`${API_BASE_URL}/admin/workers`, {
         headers: {
-          "Authorization": `Bearer ${localStorage.getItem("token") || ""}`,
+          "Authorization": `Bearer ${localStorage.getItem("accessToken") || localStorage.getItem("token") || ""}`,
         },
       });
       if (response.ok) {
@@ -398,15 +400,24 @@ export const KYC = () => {
   const fetchKycSubmissions = async () => {
     try {
       setLoading(true);
-      const statusParam = activeView !== "all" ? `?status=${activeView}` : "";
-      const response = await fetch(`${API_BASE_URL}/kyc/admin/submissions${statusParam}`, {
+      const params = new URLSearchParams();
+      params.append("page", currentPage.toString());
+      params.append("limit", itemsPerPage.toString());
+      if (activeView !== "all") params.append("status", activeView);
+
+      const response = await fetch(`${API_BASE_URL}/kyc/admin/submissions?${params.toString()}`, {
         headers: {
-          "Authorization": `Bearer ${localStorage.getItem("token") || ""}`,
+          "Authorization": `Bearer ${localStorage.getItem("accessToken") || localStorage.getItem("token") || ""}`,
         },
       });
       if (response.ok) {
         const data = await response.json();
         setKycSubmissions(data.data?.submissions || []);
+        const pagination = data.data?.pagination;
+        if (pagination) {
+          setTotalItems(pagination.total || 0);
+          setTotalPages(pagination.pages || 0);
+        }
       }
     } catch (error) {
       console.error("Error fetching KYC submissions:", error);
@@ -417,8 +428,11 @@ export const KYC = () => {
 
   useEffect(() => {
     fetchWorkers();
+  }, []);
+
+  useEffect(() => {
     fetchKycSubmissions();
-  }, [activeView]);
+  }, [activeView, currentPage, itemsPerPage]);
 
   const handleApproveKyc = async (kycId: string) => {
     try {
@@ -427,7 +441,7 @@ export const KYC = () => {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${localStorage.getItem("token") || ""}`,
+          "Authorization": `Bearer ${localStorage.getItem("accessToken") || localStorage.getItem("token") || ""}`,
         },
         body: JSON.stringify({ status: "approved" }),
       });
@@ -449,7 +463,7 @@ export const KYC = () => {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${localStorage.getItem("token") || ""}`,
+          "Authorization": `Bearer ${localStorage.getItem("accessToken") || localStorage.getItem("token") || ""}`,
         },
         body: JSON.stringify({ status: "rejected", rejection_reason: reason }),
       });
@@ -464,17 +478,6 @@ export const KYC = () => {
     }
   };
 
-  const filteredSubmissions = kycSubmissions.filter((kyc) =>
-    kyc.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    kyc.document_number?.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  // Pagination logic
-  const totalPages = Math.ceil(filteredSubmissions.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
-  const paginatedSubmissions = filteredSubmissions.slice(startIndex, endIndex);
-
   const handlePageChange = (page: number) => {
     setCurrentPage(page);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -484,6 +487,12 @@ export const KYC = () => {
     setItemsPerPage(newItemsPerPage);
     setCurrentPage(1);
   };
+
+  const filteredSubmissions = kycSubmissions.filter((kyc) =>
+    kyc.full_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    kyc.document_number?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
 
   const getStatusIcon = (status: string) => {
     switch (status.toLowerCase()) {
@@ -640,7 +649,7 @@ export const KYC = () => {
                 </tr>
               </thead>
               <tbody>
-                {paginatedSubmissions.map((kyc: any, index: number) => (
+                {filteredSubmissions.map((kyc: any, index: number) => (
                   <tr
                     key={kyc._id?.$oid || index}
                     style={{
@@ -733,9 +742,9 @@ export const KYC = () => {
         {!loading && filteredSubmissions.length > 0 && (
           <Pagination
             currentPage={currentPage}
-            totalPages={totalPages}
+            totalPages={totalPages || Math.ceil(totalItems / itemsPerPage)}
             itemsPerPage={itemsPerPage}
-            totalItems={filteredSubmissions.length}
+            totalItems={totalItems}
             onPageChange={handlePageChange}
             onItemsPerPageChange={handleItemsPerPageChange}
           />
