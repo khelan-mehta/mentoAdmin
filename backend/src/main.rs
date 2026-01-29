@@ -195,6 +195,8 @@ fn rocket() -> Rocket<Build> {
                 routes::admin::get_worker_by_id,
                 routes::admin::update_worker,
                 routes::admin::delete_worker,
+                // Admin Routes - Razorpay
+                routes::admin::get_razorpay_payment,
                 // Notification Routes
                 routes::notification::get_notifications,
                 routes::notification::mark_notification_read,

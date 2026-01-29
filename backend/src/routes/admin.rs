@@ -1,5 +1,5 @@
 use crate::db::DbConn;
-use crate::models::{CategoryResponse, MainCategory, SubCategory, SubCategoryResponse, WorkerProfile, JobSeekerProfile, User};
+use crate::models::{CategoryResponse, MainCategory, SubCategory, SubCategoryResponse, WorkerProfile, JobSeekerProfile, User, Subscription};
 use crate::utils::{ApiError, ApiResponse};
 use mongodb::bson::{doc, DateTime, oid::ObjectId};
 use mongodb::options::FindOptions;
@@ -8,6 +8,7 @@ use rocket::serde::json::Json;
 use rocket_okapi::openapi;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use reqwest::Client;
 
 // Internal struct to deserialize from MongoDB services collection
 #[derive(Debug, Serialize, Deserialize)]
@@ -173,7 +174,7 @@ pub async fn get_all_workers(
         workers.push(worker);
     }
 
-    // Fetch user data for each worker
+    // Fetch user data and payment_id for each worker
     let mut workers_with_user_data = Vec::new();
     for worker in workers {
         let mut worker_json = serde_json::to_value(&worker)
@@ -190,6 +191,23 @@ pub async fn get_all_workers(
                     obj.insert("user_mobile".to_string(), serde_json::json!(user.mobile));
                     obj.insert("user_email".to_string(), serde_json::json!(user.email));
                 }
+            }
+        }
+
+        // Fetch payment_id from subscriptions collection
+        if let Ok(Some(subscription)) = db.collection::<Subscription>("subscriptions")
+            .find_one(
+                doc! {
+                    "user_id": worker.user_id,
+                    "subscription_type": "worker",
+                    "status": "active"
+                },
+                None,
+            )
+            .await
+        {
+            if let Some(obj) = worker_json.as_object_mut() {
+                obj.insert("payment_id".to_string(), serde_json::json!(subscription.payment_id));
             }
         }
 
@@ -283,7 +301,7 @@ pub async fn get_all_job_seekers(
         profiles.push(profile);
     }
 
-    // Fetch user data for each job seeker profile
+    // Fetch user data and payment_id for each job seeker profile
     let mut profiles_with_user_data = Vec::new();
     for profile in profiles {
         let mut profile_json = serde_json::to_value(&profile)
@@ -300,6 +318,23 @@ pub async fn get_all_job_seekers(
                     obj.insert("user_email".to_string(), serde_json::json!(user.email));
                     obj.insert("user_photo".to_string(), serde_json::json!(user.profile_photo));
                 }
+            }
+        }
+
+        // Fetch payment_id from subscriptions collection
+        if let Ok(Some(subscription)) = db.collection::<Subscription>("subscriptions")
+            .find_one(
+                doc! {
+                    "user_id": profile.user_id,
+                    "subscription_type": "jobseeker",
+                    "status": "active"
+                },
+                None,
+            )
+            .await
+        {
+            if let Some(obj) = profile_json.as_object_mut() {
+                obj.insert("payment_id".to_string(), serde_json::json!(subscription.payment_id));
             }
         }
 
@@ -990,4 +1025,43 @@ pub async fn delete_worker(
     Ok(Json(ApiResponse::success(serde_json::json!({
         "message": "Worker profile deleted successfully"
     }))))
+}
+
+// ==================== RAZORPAY PAYMENT INFO ====================
+
+#[openapi(tag = "Admin - Razorpay")]
+#[get("/admin/razorpay/payment/<payment_id>")]
+pub async fn get_razorpay_payment(
+    payment_id: String,
+) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
+    let key_id = std::env::var("RAZORPAY_KEY_ID")
+        .map_err(|_| ApiError::internal_error("Missing Razorpay key ID"))?;
+    let key_secret = std::env::var("RAZORPAY_KEY_SECRET")
+        .map_err(|_| ApiError::internal_error("Missing Razorpay key secret"))?;
+
+    let client = Client::new();
+    let url = format!("https://api.razorpay.com/v1/payments/{}", payment_id);
+
+    let response = client
+        .get(&url)
+        .basic_auth(&key_id, Some(&key_secret))
+        .send()
+        .await
+        .map_err(|e| ApiError::internal_error(format!("Failed to fetch payment: {}", e)))?;
+
+    if !response.status().is_success() {
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        return Err(ApiError::internal_error(format!(
+            "Razorpay API error ({}): {}",
+            status, body
+        )));
+    }
+
+    let payment_data: serde_json::Value = response
+        .json()
+        .await
+        .map_err(|e| ApiError::internal_error(format!("Failed to parse payment response: {}", e)))?;
+
+    Ok(Json(ApiResponse::success(payment_data)))
 }

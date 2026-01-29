@@ -18,11 +18,13 @@ import {
   Mail,
   Download,
   FileSpreadsheet,
+  FileText,
   Calculator,
   Filter,
   CheckCircle,
 } from "lucide-react";
 import * as XLSX from "xlsx";
+import { jsPDF } from "jspdf";
 
 import { BASE_URL } from "./Constants";
 import { Pagination } from "./Pagination";
@@ -1000,12 +1002,314 @@ const InvoiceExportModal = ({
 
 // ==================== SUBSCRIPTION DETAIL MODAL ====================
 const SubscriptionDetailModal = ({ subscription, onClose }: any) => {
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+
   if (!subscription) return null;
 
   const plan = subscription.subscription_plan?.toLowerCase() || "free";
   const config = planConfig[plan] || planConfig.free;
   const IconComponent = config.icon;
   const profilePhotoUrl = getProfilePhotoUrl(subscription.user_photo);
+
+  const generateInvoicePdf = async () => {
+    setIsGeneratingPdf(true);
+    try {
+      const paymentId = subscription.payment_id;
+      let paymentData: any = null;
+
+      // Fetch Razorpay payment info if payment_id exists
+      if (paymentId && paymentId !== "N/A" && paymentId !== null) {
+        try {
+          const response = await fetch(
+            `${API_BASE_URL}/admin/razorpay/payment/${paymentId}`,
+            {
+              headers: {
+                Authorization: `Bearer ${localStorage.getItem("accessToken") || localStorage.getItem("token") || ""}`,
+              },
+            },
+          );
+          if (response.ok) {
+            const result = await response.json();
+            paymentData = result.data;
+          }
+        } catch (err) {
+          console.error("Failed to fetch Razorpay payment info:", err);
+        }
+      }
+
+      // Create PDF
+      const doc = new jsPDF();
+      const pageWidth = doc.internal.pageSize.getWidth();
+      let y = 20;
+
+      // --- Header ---
+      doc.setFontSize(18);
+      doc.setFont("helvetica", "bold");
+      doc.text("TAX INVOICE", pageWidth / 2, y, { align: "center" });
+      y += 12;
+
+      // Company details
+      doc.setFontSize(12);
+      doc.setFont("helvetica", "bold");
+      doc.text(COMPANY_INFO.name, pageWidth / 2, y, { align: "center" });
+      y += 6;
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "normal");
+      doc.text(
+        `${COMPANY_INFO.address}, ${COMPANY_INFO.city}, ${COMPANY_INFO.state} - ${COMPANY_INFO.pincode}`,
+        pageWidth / 2,
+        y,
+        { align: "center" },
+      );
+      y += 5;
+      doc.text(
+        `GSTIN: ${COMPANY_INFO.gstin} | PAN: ${COMPANY_INFO.pan}`,
+        pageWidth / 2,
+        y,
+        { align: "center" },
+      );
+      y += 5;
+      doc.text(
+        `Email: ${COMPANY_INFO.email} | Phone: ${COMPANY_INFO.phone}`,
+        pageWidth / 2,
+        y,
+        { align: "center" },
+      );
+      y += 8;
+
+      // Divider
+      doc.setDrawColor(200);
+      doc.setLineWidth(0.5);
+      doc.line(15, y, pageWidth - 15, y);
+      y += 8;
+
+      // Invoice info
+      const invoiceDate = new Date();
+      const invoiceNumber = `MENTO/${invoiceDate.getFullYear()}${String(invoiceDate.getMonth() + 1).padStart(2, "0")}/${String(Math.floor(Math.random() * 99999)).padStart(5, "0")}`;
+
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "bold");
+      doc.text("Invoice Number:", 15, y);
+      doc.setFont("helvetica", "normal");
+      doc.text(invoiceNumber, 60, y);
+      doc.setFont("helvetica", "bold");
+      doc.text("Invoice Date:", pageWidth / 2 + 10, y);
+      doc.setFont("helvetica", "normal");
+      doc.text(invoiceDate.toLocaleDateString("en-IN"), pageWidth / 2 + 50, y);
+      y += 12;
+
+      // --- Customer Details ---
+      doc.setFontSize(11);
+      doc.setFont("helvetica", "bold");
+      doc.text("Bill To:", 15, y);
+      y += 6;
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "normal");
+
+      const customerName = subscription.full_name || subscription.name || "N/A";
+      const customerEmail = subscription.user_email || "N/A";
+      const customerPhone = subscription.user_mobile || "N/A";
+      const customerCity = subscription.user_city || "N/A";
+      const customerPincode = subscription.user_pincode || "";
+
+      doc.text(`Name: ${customerName}`, 15, y);
+      y += 5;
+      doc.text(`Email: ${customerEmail}`, 15, y);
+      y += 5;
+      doc.text(`Phone: ${customerPhone}`, 15, y);
+      y += 5;
+      doc.text(
+        `Location: ${customerCity}${customerPincode ? ` - ${customerPincode}` : ""}`,
+        15,
+        y,
+      );
+      y += 5;
+      doc.text(
+        `User Type: ${subscription.userType === "job_seeker" ? "Job Seeker" : "Worker"}`,
+        15,
+        y,
+      );
+      y += 10;
+
+      // Divider
+      doc.line(15, y, pageWidth - 15, y);
+      y += 8;
+
+      // --- Subscription Details Table ---
+      const basePrice =
+        planPricing[plan] || 0;
+      const gst = (() => {
+        if (basePrice === 0)
+          return { cgst: 0, sgst: 0, igst: 0, totalGst: 0, total: 0 };
+        const cgst = (basePrice * CGST_RATE) / 100;
+        const sgst = (basePrice * SGST_RATE) / 100;
+        return {
+          cgst,
+          sgst,
+          igst: 0,
+          totalGst: cgst + sgst,
+          total: basePrice + cgst + sgst,
+        };
+      })();
+
+      // Table header
+      doc.setFillColor(240, 240, 240);
+      doc.rect(15, y, pageWidth - 30, 8, "F");
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "bold");
+      doc.text("Description", 17, y + 5.5);
+      doc.text("HSN", 85, y + 5.5);
+      doc.text("Base (INR)", 105, y + 5.5);
+      doc.text("CGST", 130, y + 5.5);
+      doc.text("SGST", 150, y + 5.5);
+      doc.text("Total (INR)", 170, y + 5.5);
+      y += 10;
+
+      // Table row
+      doc.setFont("helvetica", "normal");
+      const planDisplayName =
+        (subscription.subscription_plan || "Free").charAt(0).toUpperCase() +
+        (subscription.subscription_plan || "free").slice(1);
+
+      const startDate = subscription.subscription_starts_at || subscription.created_at;
+      const endDate = subscription.subscription_expires_at;
+      const formatDateStr = (dateValue: any): string => {
+        if (!dateValue) return "N/A";
+        try {
+          const date = new Date(dateValue.$date || dateValue);
+          if (isNaN(date.getTime())) return "N/A";
+          return date.toLocaleDateString("en-IN");
+        } catch {
+          return "N/A";
+        }
+      };
+
+      doc.text(`${planDisplayName} Plan`, 17, y + 5);
+      doc.setFontSize(7);
+      doc.text(
+        `(${formatDateStr(startDate)} to ${formatDateStr(endDate)})`,
+        17,
+        y + 9,
+      );
+      doc.setFontSize(9);
+      doc.text("998314", 85, y + 5);
+      doc.text(`${basePrice.toFixed(2)}`, 105, y + 5);
+      doc.text(`${gst.cgst.toFixed(2)}`, 130, y + 5);
+      doc.text(`${gst.sgst.toFixed(2)}`, 150, y + 5);
+      doc.text(`${gst.total.toFixed(2)}`, 170, y + 5);
+      y += 14;
+
+      // Divider
+      doc.line(15, y, pageWidth - 15, y);
+      y += 6;
+
+      // Totals
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "normal");
+      doc.text("Subtotal:", 130, y);
+      doc.text(`${basePrice.toFixed(2)}`, 170, y);
+      y += 6;
+      doc.text(`CGST @ ${CGST_RATE}%:`, 130, y);
+      doc.text(`${gst.cgst.toFixed(2)}`, 170, y);
+      y += 6;
+      doc.text(`SGST @ ${SGST_RATE}%:`, 130, y);
+      doc.text(`${gst.sgst.toFixed(2)}`, 170, y);
+      y += 6;
+      doc.setFont("helvetica", "bold");
+      doc.text("Grand Total:", 130, y);
+      doc.text(`INR ${gst.total.toFixed(2)}`, 170, y);
+      y += 12;
+
+      // Divider
+      doc.line(15, y, pageWidth - 15, y);
+      y += 8;
+
+      // --- Payment Details ---
+      doc.setFontSize(11);
+      doc.setFont("helvetica", "bold");
+      doc.text("Payment Details:", 15, y);
+      y += 7;
+      doc.setFontSize(10);
+      doc.setFont("helvetica", "normal");
+
+      if (paymentData) {
+        doc.text(`Payment ID: ${paymentData.id || paymentId || "N/A"}`, 15, y);
+        y += 5;
+        doc.text(
+          `Method: ${(paymentData.method || "N/A").toUpperCase()}`,
+          15,
+          y,
+        );
+        y += 5;
+        doc.text(
+          `Status: ${(paymentData.status || "N/A").toUpperCase()}`,
+          15,
+          y,
+        );
+        y += 5;
+        if (paymentData.bank) {
+          doc.text(`Bank: ${paymentData.bank}`, 15, y);
+          y += 5;
+        }
+        if (paymentData.vpa) {
+          doc.text(`UPI ID: ${paymentData.vpa}`, 15, y);
+          y += 5;
+        }
+        if (paymentData.wallet) {
+          doc.text(`Wallet: ${paymentData.wallet}`, 15, y);
+          y += 5;
+        }
+        const amountPaid = paymentData.amount
+          ? (paymentData.amount / 100).toFixed(2)
+          : "N/A";
+        doc.text(`Amount Paid: INR ${amountPaid}`, 15, y);
+        y += 5;
+        doc.text(`Currency: ${paymentData.currency || "INR"}`, 15, y);
+        y += 5;
+        if (paymentData.created_at) {
+          const paidDate = new Date(
+            paymentData.created_at * 1000,
+          ).toLocaleString("en-IN");
+          doc.text(`Paid On: ${paidDate}`, 15, y);
+          y += 5;
+        }
+      } else {
+        doc.text(
+          `Payment ID: ${paymentId || "N/A"}`,
+          15,
+          y,
+        );
+        y += 5;
+        doc.text("Status: Payment information not available", 15, y);
+        y += 5;
+      }
+
+      y += 10;
+
+      // Footer
+      doc.setDrawColor(200);
+      doc.line(15, y, pageWidth - 15, y);
+      y += 8;
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "italic");
+      doc.text(
+        "This is a computer-generated invoice and does not require a physical signature.",
+        pageWidth / 2,
+        y,
+        { align: "center" },
+      );
+
+      // Save PDF
+      doc.save(
+        `invoice-${customerName.replace(/\s+/g, "_")}-${invoiceDate.toISOString().split("T")[0]}.pdf`,
+      );
+    } catch (error) {
+      console.error("PDF generation error:", error);
+      alert("Failed to generate invoice PDF. Please try again.");
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  };
 
   return (
     <div
@@ -1595,8 +1899,49 @@ const SubscriptionDetailModal = ({ subscription, onClose }: any) => {
               </div>
             </div>
           )}
+
+          {/* Download Invoice PDF Button */}
+          {plan !== "free" && plan !== "none" && (
+            <button
+              onClick={generateInvoicePdf}
+              disabled={isGeneratingPdf}
+              style={{
+                width: "100%",
+                padding: "14px 24px",
+                background: theme.colors.primary,
+                color: "white",
+                border: "none",
+                borderRadius: "8px",
+                fontSize: "15px",
+                fontWeight: "600",
+                cursor: isGeneratingPdf ? "not-allowed" : "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "8px",
+                transition: "all 0.2s",
+                opacity: isGeneratingPdf ? 0.7 : 1,
+              }}
+            >
+              {isGeneratingPdf ? (
+                <>
+                  <Loader2
+                    size={18}
+                    style={{ animation: "spin 1s linear infinite" }}
+                  />
+                  Generating Invoice PDF...
+                </>
+              ) : (
+                <>
+                  <FileText size={18} />
+                  Download Invoice PDF
+                </>
+              )}
+            </button>
+          )}
         </div>
       </div>
+      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 };
