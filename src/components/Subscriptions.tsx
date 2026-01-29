@@ -124,12 +124,18 @@ interface InvoiceExportModalProps {
   onClose: () => void;
 }
 
-const InvoiceExportModal = ({ subscriptions, onClose }: InvoiceExportModalProps) => {
-  const [exportType, setExportType] = useState<"all" | "paid" | "filtered">("paid");
+const InvoiceExportModal = ({
+  subscriptions,
+  onClose,
+}: InvoiceExportModalProps) => {
+  const [exportType, setExportType] = useState<"all" | "paid" | "filtered">(
+    "paid",
+  );
   const [gstType, setGstType] = useState<"intra" | "inter">("intra");
-  const [dateFrom, setDateFrom] = useState("");
-  const [dateTo, setDateTo] = useState("");
-  const [userTypeFilter, setUserTypeFilter] = useState<"all" | "worker" | "job_seeker">("all");
+
+  const [userTypeFilter, setUserTypeFilter] = useState<
+    "all" | "worker" | "job_seeker"
+  >("all");
   const [planFilter, setPlanFilter] = useState<string>("all");
   const [isExporting, setIsExporting] = useState(false);
   const [exportSuccess, setExportSuccess] = useState(false);
@@ -180,30 +186,31 @@ const InvoiceExportModal = ({ subscriptions, onClose }: InvoiceExportModalProps)
       if (exportType === "paid" && !isPaid) return false;
 
       // Filter by user type
-      if (userTypeFilter !== "all" && sub.userType !== userTypeFilter) return false;
+      if (userTypeFilter !== "all" && sub.userType !== userTypeFilter)
+        return false;
 
       // Filter by plan
       if (planFilter !== "all" && plan !== planFilter) return false;
 
       // Filter by date range (using created_at or subscription start date if available)
-      if (dateFrom || dateTo) {
-        const subDate = sub.subscription_starts_at || sub.created_at;
-        if (subDate) {
-          const date = new Date(subDate.$date || subDate);
-          if (dateFrom && date < new Date(dateFrom)) return false;
-          if (dateTo && date > new Date(dateTo + "T23:59:59")) return false;
-        }
-      }
 
       return true;
     });
   };
 
   // Format date for display
+  // Format date for display
   const formatDate = (dateValue: any): string => {
     if (!dateValue) return new Date().toISOString().split("T")[0];
-    const date = new Date(dateValue.$date || dateValue);
-    return date.toISOString().split("T")[0];
+    try {
+      const date = new Date(dateValue.$date || dateValue);
+      if (isNaN(date.getTime())) {
+        return new Date().toISOString().split("T")[0];
+      }
+      return date.toISOString().split("T")[0];
+    } catch {
+      return new Date().toISOString().split("T")[0];
+    }
   };
 
   // Export to Excel
@@ -237,8 +244,12 @@ const InvoiceExportModal = ({ subscriptions, onClose }: InvoiceExportModalProps)
           customerCity: sub.user_city || "N/A",
           customerPincode: sub.user_pincode || "N/A",
           userType: sub.userType === "job_seeker" ? "Job Seeker" : "Worker",
-          planName: (sub.subscription_plan || "Free").charAt(0).toUpperCase() + (sub.subscription_plan || "free").slice(1),
-          subscriptionStartDate: formatDate(sub.subscription_starts_at || sub.created_at),
+          planName:
+            (sub.subscription_plan || "Free").charAt(0).toUpperCase() +
+            (sub.subscription_plan || "free").slice(1),
+          subscriptionStartDate: formatDate(
+            sub.subscription_starts_at || sub.created_at,
+          ),
           subscriptionEndDate: formatDate(sub.subscription_expires_at),
           basePrice: basePrice,
           cgstRate: isInterState ? 0 : CGST_RATE,
@@ -274,16 +285,37 @@ const InvoiceExportModal = ({ subscriptions, onClose }: InvoiceExportModalProps)
         ["Phone", COMPANY_INFO.phone],
         [""],
         ["Report Generated On", invoiceDate.toLocaleString()],
-        ["GST Type", isInterState ? "Inter-State (IGST)" : "Intra-State (CGST + SGST)"],
+        [
+          "GST Type",
+          isInterState ? "Inter-State (IGST)" : "Intra-State (CGST + SGST)",
+        ],
         ["Total Invoices", filtered.length],
         [""],
         ["Summary"],
-        ["Total Base Amount (INR)", invoiceData.reduce((sum, inv) => sum + inv.basePrice, 0)],
-        ["Total CGST (INR)", invoiceData.reduce((sum, inv) => sum + inv.cgstAmount, 0)],
-        ["Total SGST (INR)", invoiceData.reduce((sum, inv) => sum + inv.sgstAmount, 0)],
-        ["Total IGST (INR)", invoiceData.reduce((sum, inv) => sum + inv.igstAmount, 0)],
-        ["Total GST (INR)", invoiceData.reduce((sum, inv) => sum + inv.totalGst, 0)],
-        ["Grand Total (INR)", invoiceData.reduce((sum, inv) => sum + inv.totalAmount, 0)],
+        [
+          "Total Base Amount (INR)",
+          invoiceData.reduce((sum, inv) => sum + inv.basePrice, 0),
+        ],
+        [
+          "Total CGST (INR)",
+          invoiceData.reduce((sum, inv) => sum + inv.cgstAmount, 0),
+        ],
+        [
+          "Total SGST (INR)",
+          invoiceData.reduce((sum, inv) => sum + inv.sgstAmount, 0),
+        ],
+        [
+          "Total IGST (INR)",
+          invoiceData.reduce((sum, inv) => sum + inv.igstAmount, 0),
+        ],
+        [
+          "Total GST (INR)",
+          invoiceData.reduce((sum, inv) => sum + inv.totalGst, 0),
+        ],
+        [
+          "Grand Total (INR)",
+          invoiceData.reduce((sum, inv) => sum + inv.totalAmount, 0),
+        ],
       ];
 
       const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
@@ -346,7 +378,10 @@ const InvoiceExportModal = ({ subscriptions, onClose }: InvoiceExportModalProps)
         inv.status,
       ]);
 
-      const detailSheet = XLSX.utils.aoa_to_sheet([invoiceHeaders, ...invoiceRows]);
+      const detailSheet = XLSX.utils.aoa_to_sheet([
+        invoiceHeaders,
+        ...invoiceRows,
+      ]);
 
       // Set column widths for detail
       detailSheet["!cols"] = [
@@ -378,7 +413,10 @@ const InvoiceExportModal = ({ subscriptions, onClose }: InvoiceExportModalProps)
       XLSX.utils.book_append_sheet(workbook, detailSheet, "Invoices");
 
       // Sheet 3: GST Breakup by Plan
-      const planBreakup: Record<string, { count: number; base: number; gst: number; total: number }> = {};
+      const planBreakup: Record<
+        string,
+        { count: number; base: number; gst: number; total: number }
+      > = {};
       invoiceData.forEach((inv) => {
         const plan = inv.planName;
         if (!planBreakup[plan]) {
@@ -390,7 +428,13 @@ const InvoiceExportModal = ({ subscriptions, onClose }: InvoiceExportModalProps)
         planBreakup[plan].total += inv.totalAmount;
       });
 
-      const breakupHeaders = ["Plan Name", "No. of Subscriptions", "Base Amount (INR)", "Total GST (INR)", "Total Amount (INR)"];
+      const breakupHeaders = [
+        "Plan Name",
+        "No. of Subscriptions",
+        "Base Amount (INR)",
+        "Total GST (INR)",
+        "Total Amount (INR)",
+      ];
       const breakupRows = Object.entries(planBreakup).map(([plan, data]) => [
         plan,
         data.count,
@@ -400,18 +444,45 @@ const InvoiceExportModal = ({ subscriptions, onClose }: InvoiceExportModalProps)
       ]);
 
       // Add total row
-      const totalBase = Object.values(planBreakup).reduce((sum, d) => sum + d.base, 0);
-      const totalGst = Object.values(planBreakup).reduce((sum, d) => sum + d.gst, 0);
-      const totalAmount = Object.values(planBreakup).reduce((sum, d) => sum + d.total, 0);
-      breakupRows.push(["TOTAL", filtered.length, Math.round(totalBase * 100) / 100, Math.round(totalGst * 100) / 100, Math.round(totalAmount * 100) / 100]);
+      const totalBase = Object.values(planBreakup).reduce(
+        (sum, d) => sum + d.base,
+        0,
+      );
+      const totalGst = Object.values(planBreakup).reduce(
+        (sum, d) => sum + d.gst,
+        0,
+      );
+      const totalAmount = Object.values(planBreakup).reduce(
+        (sum, d) => sum + d.total,
+        0,
+      );
+      breakupRows.push([
+        "TOTAL",
+        filtered.length,
+        Math.round(totalBase * 100) / 100,
+        Math.round(totalGst * 100) / 100,
+        Math.round(totalAmount * 100) / 100,
+      ]);
 
-      const breakupSheet = XLSX.utils.aoa_to_sheet([breakupHeaders, ...breakupRows]);
-      breakupSheet["!cols"] = [{ wch: 15 }, { wch: 20 }, { wch: 18 }, { wch: 18 }, { wch: 18 }];
+      const breakupSheet = XLSX.utils.aoa_to_sheet([
+        breakupHeaders,
+        ...breakupRows,
+      ]);
+      breakupSheet["!cols"] = [
+        { wch: 15 },
+        { wch: 20 },
+        { wch: 18 },
+        { wch: 18 },
+        { wch: 18 },
+      ];
 
       XLSX.utils.book_append_sheet(workbook, breakupSheet, "Plan Breakup");
 
       // Sheet 4: User Type Breakup
-      const userTypeBreakup: Record<string, { count: number; base: number; gst: number; total: number }> = {};
+      const userTypeBreakup: Record<
+        string,
+        { count: number; base: number; gst: number; total: number }
+      > = {};
       invoiceData.forEach((inv) => {
         const type = inv.userType;
         if (!userTypeBreakup[type]) {
@@ -423,19 +494,40 @@ const InvoiceExportModal = ({ subscriptions, onClose }: InvoiceExportModalProps)
         userTypeBreakup[type].total += inv.totalAmount;
       });
 
-      const userBreakupHeaders = ["User Type", "No. of Subscriptions", "Base Amount (INR)", "Total GST (INR)", "Total Amount (INR)"];
-      const userBreakupRows = Object.entries(userTypeBreakup).map(([type, data]) => [
-        type,
-        data.count,
-        Math.round(data.base * 100) / 100,
-        Math.round(data.gst * 100) / 100,
-        Math.round(data.total * 100) / 100,
+      const userBreakupHeaders = [
+        "User Type",
+        "No. of Subscriptions",
+        "Base Amount (INR)",
+        "Total GST (INR)",
+        "Total Amount (INR)",
+      ];
+      const userBreakupRows = Object.entries(userTypeBreakup).map(
+        ([type, data]) => [
+          type,
+          data.count,
+          Math.round(data.base * 100) / 100,
+          Math.round(data.gst * 100) / 100,
+          Math.round(data.total * 100) / 100,
+        ],
+      );
+
+      const userBreakupSheet = XLSX.utils.aoa_to_sheet([
+        userBreakupHeaders,
+        ...userBreakupRows,
       ]);
+      userBreakupSheet["!cols"] = [
+        { wch: 15 },
+        { wch: 20 },
+        { wch: 18 },
+        { wch: 18 },
+        { wch: 18 },
+      ];
 
-      const userBreakupSheet = XLSX.utils.aoa_to_sheet([userBreakupHeaders, ...userBreakupRows]);
-      userBreakupSheet["!cols"] = [{ wch: 15 }, { wch: 20 }, { wch: 18 }, { wch: 18 }, { wch: 18 }];
-
-      XLSX.utils.book_append_sheet(workbook, userBreakupSheet, "User Type Breakup");
+      XLSX.utils.book_append_sheet(
+        workbook,
+        userBreakupSheet,
+        "User Type Breakup",
+      );
 
       // Generate filename
       const timestamp = invoiceDate.toISOString().split("T")[0];
@@ -449,7 +541,6 @@ const InvoiceExportModal = ({ subscriptions, onClose }: InvoiceExportModalProps)
         setExportSuccess(false);
         onClose();
       }, 2000);
-
     } catch (error) {
       console.error("Export error:", error);
       alert("Failed to export invoices. Please try again.");
@@ -597,7 +688,10 @@ const InvoiceExportModal = ({ subscriptions, onClose }: InvoiceExportModalProps)
                     marginBottom: "8px",
                   }}
                 >
-                  <Filter size={14} style={{ marginRight: "6px", verticalAlign: "middle" }} />
+                  <Filter
+                    size={14}
+                    style={{ marginRight: "6px", verticalAlign: "middle" }}
+                  />
                   Export Type
                 </label>
                 <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
@@ -612,8 +706,14 @@ const InvoiceExportModal = ({ subscriptions, onClose }: InvoiceExportModalProps)
                         padding: "10px 16px",
                         borderRadius: "8px",
                         border: `2px solid ${exportType === option.key ? theme.colors.primary : theme.colors.border}`,
-                        background: exportType === option.key ? `${theme.colors.primary}10` : "transparent",
-                        color: exportType === option.key ? theme.colors.primary : theme.colors.text,
+                        background:
+                          exportType === option.key
+                            ? `${theme.colors.primary}10`
+                            : "transparent",
+                        color:
+                          exportType === option.key
+                            ? theme.colors.primary
+                            : theme.colors.text,
                         fontSize: "14px",
                         fontWeight: "500",
                         cursor: "pointer",
@@ -637,7 +737,10 @@ const InvoiceExportModal = ({ subscriptions, onClose }: InvoiceExportModalProps)
                     marginBottom: "8px",
                   }}
                 >
-                  <Calculator size={14} style={{ marginRight: "6px", verticalAlign: "middle" }} />
+                  <Calculator
+                    size={14}
+                    style={{ marginRight: "6px", verticalAlign: "middle" }}
+                  />
                   GST Calculation Type
                 </label>
                 <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
@@ -647,8 +750,14 @@ const InvoiceExportModal = ({ subscriptions, onClose }: InvoiceExportModalProps)
                       padding: "10px 16px",
                       borderRadius: "8px",
                       border: `2px solid ${gstType === "intra" ? theme.colors.primary : theme.colors.border}`,
-                      background: gstType === "intra" ? `${theme.colors.primary}10` : "transparent",
-                      color: gstType === "intra" ? theme.colors.primary : theme.colors.text,
+                      background:
+                        gstType === "intra"
+                          ? `${theme.colors.primary}10`
+                          : "transparent",
+                      color:
+                        gstType === "intra"
+                          ? theme.colors.primary
+                          : theme.colors.text,
                       fontSize: "14px",
                       fontWeight: "500",
                       cursor: "pointer",
@@ -663,8 +772,14 @@ const InvoiceExportModal = ({ subscriptions, onClose }: InvoiceExportModalProps)
                       padding: "10px 16px",
                       borderRadius: "8px",
                       border: `2px solid ${gstType === "inter" ? theme.colors.primary : theme.colors.border}`,
-                      background: gstType === "inter" ? `${theme.colors.primary}10` : "transparent",
-                      color: gstType === "inter" ? theme.colors.primary : theme.colors.text,
+                      background:
+                        gstType === "inter"
+                          ? `${theme.colors.primary}10`
+                          : "transparent",
+                      color:
+                        gstType === "inter"
+                          ? theme.colors.primary
+                          : theme.colors.text,
                       fontSize: "14px",
                       fontWeight: "500",
                       cursor: "pointer",
@@ -698,7 +813,10 @@ const InvoiceExportModal = ({ subscriptions, onClose }: InvoiceExportModalProps)
                     marginBottom: "8px",
                   }}
                 >
-                  <Users size={14} style={{ marginRight: "6px", verticalAlign: "middle" }} />
+                  <Users
+                    size={14}
+                    style={{ marginRight: "6px", verticalAlign: "middle" }}
+                  />
                   User Type
                 </label>
                 <select
@@ -731,7 +849,10 @@ const InvoiceExportModal = ({ subscriptions, onClose }: InvoiceExportModalProps)
                     marginBottom: "8px",
                   }}
                 >
-                  <Crown size={14} style={{ marginRight: "6px", verticalAlign: "middle" }} />
+                  <Crown
+                    size={14}
+                    style={{ marginRight: "6px", verticalAlign: "middle" }}
+                  />
                   Subscription Plan
                 </label>
                 <select
@@ -757,74 +878,6 @@ const InvoiceExportModal = ({ subscriptions, onClose }: InvoiceExportModalProps)
                 </select>
               </div>
 
-              {/* Date Range */}
-              <div style={{ marginBottom: "24px" }}>
-                <label
-                  style={{
-                    display: "block",
-                    fontSize: "14px",
-                    fontWeight: "600",
-                    color: theme.colors.text,
-                    marginBottom: "8px",
-                  }}
-                >
-                  <Calendar size={14} style={{ marginRight: "6px", verticalAlign: "middle" }} />
-                  Date Range (Optional)
-                </label>
-                <div style={{ display: "flex", gap: "12px" }}>
-                  <div style={{ flex: 1 }}>
-                    <label
-                      style={{
-                        display: "block",
-                        fontSize: "12px",
-                        color: theme.colors.textSecondary,
-                        marginBottom: "4px",
-                      }}
-                    >
-                      From
-                    </label>
-                    <input
-                      type="date"
-                      value={dateFrom}
-                      onChange={(e) => setDateFrom(e.target.value)}
-                      style={{
-                        width: "100%",
-                        padding: "10px 12px",
-                        borderRadius: "8px",
-                        border: `1px solid ${theme.colors.border}`,
-                        fontSize: "14px",
-                        outline: "none",
-                      }}
-                    />
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <label
-                      style={{
-                        display: "block",
-                        fontSize: "12px",
-                        color: theme.colors.textSecondary,
-                        marginBottom: "4px",
-                      }}
-                    >
-                      To
-                    </label>
-                    <input
-                      type="date"
-                      value={dateTo}
-                      onChange={(e) => setDateTo(e.target.value)}
-                      style={{
-                        width: "100%",
-                        padding: "10px 12px",
-                        borderRadius: "8px",
-                        border: `1px solid ${theme.colors.border}`,
-                        fontSize: "14px",
-                        outline: "none",
-                      }}
-                    />
-                  </div>
-                </div>
-              </div>
-
               {/* Preview Count */}
               <div
                 style={{
@@ -841,7 +894,12 @@ const InvoiceExportModal = ({ subscriptions, onClose }: InvoiceExportModalProps)
                     alignItems: "center",
                   }}
                 >
-                  <span style={{ fontSize: "14px", color: theme.colors.textSecondary }}>
+                  <span
+                    style={{
+                      fontSize: "14px",
+                      color: theme.colors.textSecondary,
+                    }}
+                  >
                     Subscriptions to export:
                   </span>
                   <span
@@ -898,7 +956,10 @@ const InvoiceExportModal = ({ subscriptions, onClose }: InvoiceExportModalProps)
                 style={{
                   width: "100%",
                   padding: "14px 24px",
-                  background: filteredCount === 0 ? theme.colors.border : theme.colors.success,
+                  background:
+                    filteredCount === 0
+                      ? theme.colors.border
+                      : theme.colors.success,
                   color: "white",
                   border: "none",
                   borderRadius: "8px",
@@ -915,7 +976,10 @@ const InvoiceExportModal = ({ subscriptions, onClose }: InvoiceExportModalProps)
               >
                 {isExporting ? (
                   <>
-                    <Loader2 size={18} style={{ animation: "spin 1s linear infinite" }} />
+                    <Loader2
+                      size={18}
+                      style={{ animation: "spin 1s linear infinite" }}
+                    />
                     Generating Invoices...
                   </>
                 ) : (
