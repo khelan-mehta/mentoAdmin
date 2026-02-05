@@ -64,7 +64,7 @@ const planConfig: Record<string, { color: string; bg: string; icon: any }> = {
   enterprise: { color: "#10B981", bg: "#D1FAE5", icon: Shield },
 };
 
-// Plan pricing configuration (in INR)
+// Plan pricing configuration (in INR) - these are INCLUSIVE of GST
 const planPricing: Record<string, number> = {
   free: 0,
   basic: 99,
@@ -80,17 +80,151 @@ const CGST_RATE = 9; // 9% CGST (for intra-state)
 const SGST_RATE = 9; // 9% SGST (for intra-state)
 const IGST_RATE = 18; // 18% IGST (for inter-state)
 
-// Company details for invoice
+// Company details for invoice (matching tax invoice format)
 const COMPANY_INFO = {
-  name: "Mento Services Pvt. Ltd.",
-  address: "123 Business Park, Sector 5",
-  city: "Mumbai",
-  state: "Maharashtra",
-  pincode: "400001",
-  gstin: "27AABCU9603R1ZM",
-  pan: "AABCU9603R",
-  email: "billing@mento.com",
-  phone: "+91 9876543210",
+  name: "MENTO SERVICES",
+  address: "336, MOMINVAS, MUMANVAS, MAHESANA",
+  district: "MAHESANA",
+  pincode: "384330",
+  city: "MAHESANA",
+  state: "Gujarat",
+  stateCode: "24",
+  phone: "9316483819",
+  gstin: "24GNCPR9725J1ZG",
+};
+
+// Bank details for invoice
+const BANK_DETAILS = {
+  bank: "BANK OF BARODA",
+  branch: "SATLASANA",
+  accountNo: "38240200001593",
+  ifsc: "BARB0SATLAS",
+};
+
+// Invoice number tracking using localStorage
+const INVOICE_STORAGE_KEY = "mento_invoice_data";
+
+interface InvoiceTrackingData {
+  counter: number;
+  userInvoices: Record<string, string>;
+}
+
+const getInvoiceTrackingData = (): InvoiceTrackingData => {
+  try {
+    const data = localStorage.getItem(INVOICE_STORAGE_KEY);
+    if (data) return JSON.parse(data);
+  } catch {}
+  return { counter: 0, userInvoices: {} };
+};
+
+const getOrCreateInvoiceNumber = (userId: string): string => {
+  const data = getInvoiceTrackingData();
+  if (data.userInvoices[userId]) {
+    return data.userInvoices[userId];
+  }
+  data.counter++;
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const sequence = String(data.counter).padStart(5, "0");
+  const invoiceNumber = `MENTO/${year}${month}/${sequence}`;
+  data.userInvoices[userId] = invoiceNumber;
+  localStorage.setItem(INVOICE_STORAGE_KEY, JSON.stringify(data));
+  return invoiceNumber;
+};
+
+// Calculate GST (plan price is INCLUSIVE of GST - base is derived)
+const calculateGSTInclusive = (planPrice: number, isInterState: boolean) => {
+  if (planPrice === 0) {
+    return { base: 0, cgst: 0, sgst: 0, igst: 0, totalGst: 0, total: 0, roundOff: 0 };
+  }
+  const base = Math.round((planPrice / (1 + GST_RATE / 100)) * 100) / 100;
+  if (isInterState) {
+    const igst = Math.round((base * IGST_RATE) / 100 * 100) / 100;
+    const roundOff = Math.round((planPrice - base - igst) * 100) / 100;
+    return { base, cgst: 0, sgst: 0, igst, totalGst: igst, total: planPrice, roundOff };
+  } else {
+    const cgst = Math.round((base * CGST_RATE) / 100 * 100) / 100;
+    const sgst = Math.round((base * SGST_RATE) / 100 * 100) / 100;
+    const roundOff = Math.round((planPrice - base - cgst - sgst) * 100) / 100;
+    return { base, cgst, sgst, igst: 0, totalGst: cgst + sgst, total: planPrice, roundOff };
+  }
+};
+
+// Number to words (Indian format)
+const numberToWords = (num: number): string => {
+  const ones = [
+    "", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine",
+    "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen",
+    "Seventeen", "Eighteen", "Nineteen",
+  ];
+  const tens = [
+    "", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety",
+  ];
+  if (num === 0) return "Zero Only";
+  const convert = (n: number): string => {
+    if (n < 20) return ones[n];
+    if (n < 100) return tens[Math.floor(n / 10)] + (n % 10 ? " " + ones[n % 10] : "");
+    if (n < 1000)
+      return ones[Math.floor(n / 100)] + " Hundred" + (n % 100 ? " " + convert(n % 100) : "");
+    if (n < 100000)
+      return convert(Math.floor(n / 1000)) + " Thousand" + (n % 1000 ? " " + convert(n % 1000) : "");
+    if (n < 10000000)
+      return convert(Math.floor(n / 100000)) + " Lakh" + (n % 100000 ? " " + convert(n % 100000) : "");
+    return convert(Math.floor(n / 10000000)) + " Crore" + (n % 10000000 ? " " + convert(n % 10000000) : "");
+  };
+  const rupees = Math.floor(num);
+  const paise = Math.round((num - rupees) * 100);
+  let result = convert(rupees);
+  if (paise > 0) {
+    result += " and " + convert(paise) + " Paise";
+  }
+  return result + " Only";
+};
+
+// Get financial year period string
+const getFinancialYearPeriod = (dateValue: any): string => {
+  let date: Date;
+  try {
+    if (dateValue?.$date?.$numberLong) {
+      date = new Date(parseInt(dateValue.$date.$numberLong));
+    } else if (dateValue?.$date) {
+      date = new Date(dateValue.$date);
+    } else {
+      date = new Date(dateValue);
+    }
+    if (isNaN(date.getTime())) date = new Date();
+  } catch {
+    date = new Date();
+  }
+  const month = date.getMonth(); // 0-indexed
+  const year = date.getFullYear();
+  const fyStart = month >= 3 ? year : year - 1;
+  const fyEnd = fyStart + 1;
+  return `01.04.${fyStart} to 31.03.${fyEnd}`;
+};
+
+// Fetch KYC details for a user
+const fetchKycDetails = async (userId: string): Promise<any> => {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/kyc/admin/user/${userId}`,
+      {
+        headers: {
+          Authorization: `Bearer ${localStorage.getItem("accessToken") || localStorage.getItem("token") || ""}`,
+        },
+      },
+    );
+    if (response.ok) {
+      const result = await response.json();
+      if (result.data && result.data.kyc_exists !== false) {
+        return result.data;
+      }
+    }
+  } catch (err) {
+    console.error("Failed to fetch KYC details:", err);
+  }
+  return null;
 };
 
 // Types for invoice
@@ -101,7 +235,10 @@ interface InvoiceItem {
   customerEmail: string;
   customerPhone: string;
   customerCity: string;
+  customerState: string;
+  customerAddress: string;
   customerPincode: string;
+  customerDistrict: string;
   userType: string;
   planName: string;
   subscriptionStartDate: string;
@@ -115,9 +252,10 @@ interface InvoiceItem {
   igstAmount: number;
   totalGst: number;
   totalAmount: number;
+  roundOff: number;
   paymentId: string;
   status: string;
-  hsnCode: string;
+  sacCode: string;
 }
 
 // ==================== INVOICE EXPORT MODAL ====================
@@ -141,41 +279,23 @@ const InvoiceExportModal = ({
   const [planFilter, setPlanFilter] = useState<string>("all");
   const [isExporting, setIsExporting] = useState(false);
   const [exportSuccess, setExportSuccess] = useState(false);
+  const [dateFrom, setDateFrom] = useState<string>("");
+  const [dateTo, setDateTo] = useState<string>("");
 
-  // Generate unique invoice number
-  const generateInvoiceNumber = (index: number, date: Date): string => {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    const sequence = String(index + 1).padStart(5, "0");
-    return `MENTO/${year}${month}/${sequence}`;
-  };
-
-  // Calculate GST amounts
-  const calculateGST = (basePrice: number, isInterState: boolean) => {
-    if (basePrice === 0) {
-      return { cgst: 0, sgst: 0, igst: 0, totalGst: 0, total: 0 };
-    }
-
-    if (isInterState) {
-      const igst = (basePrice * IGST_RATE) / 100;
-      return {
-        cgst: 0,
-        sgst: 0,
-        igst: igst,
-        totalGst: igst,
-        total: basePrice + igst,
-      };
-    } else {
-      const cgst = (basePrice * CGST_RATE) / 100;
-      const sgst = (basePrice * SGST_RATE) / 100;
-      return {
-        cgst: cgst,
-        sgst: sgst,
-        igst: 0,
-        totalGst: cgst + sgst,
-        total: basePrice + cgst + sgst,
-      };
-    }
+  // Parse date from various formats (including subscription response format)
+  const parseDateValue = (dateValue: any): Date | null => {
+    if (!dateValue) return null;
+    try {
+      if (dateValue?.$date?.$numberLong) {
+        return new Date(parseInt(dateValue.$date.$numberLong));
+      }
+      if (dateValue?.$date) {
+        return new Date(dateValue.$date);
+      }
+      const d = new Date(dateValue);
+      if (!isNaN(d.getTime())) return d;
+    } catch {}
+    return null;
   };
 
   // Filter subscriptions based on criteria
@@ -194,22 +314,38 @@ const InvoiceExportModal = ({
       // Filter by plan
       if (planFilter !== "all" && plan !== planFilter) return false;
 
-      // Filter by date range (using created_at or subscription start date if available)
+      // Filter by date range (subscription expiry date)
+      if (dateFrom || dateTo) {
+        const subDate = parseDateValue(
+          sub.subscription_expires_at || sub.created_at,
+        );
+        if (subDate) {
+          if (dateFrom) {
+            const from = new Date(dateFrom);
+            from.setHours(0, 0, 0, 0);
+            if (subDate < from) return false;
+          }
+          if (dateTo) {
+            const to = new Date(dateTo);
+            to.setHours(23, 59, 59, 999);
+            if (subDate > to) return false;
+          }
+        }
+      }
 
       return true;
     });
   };
 
   // Format date for display
-  // Format date for display
   const formatDate = (dateValue: any): string => {
     if (!dateValue) return new Date().toISOString().split("T")[0];
     try {
-      const date = new Date(dateValue.$date || dateValue);
-      if (isNaN(date.getTime())) {
-        return new Date().toISOString().split("T")[0];
+      const parsed = parseDateValue(dateValue);
+      if (parsed && !isNaN(parsed.getTime())) {
+        return parsed.toISOString().split("T")[0];
       }
-      return date.toISOString().split("T")[0];
+      return new Date().toISOString().split("T")[0];
     } catch {
       return new Date().toISOString().split("T")[0];
     }
@@ -231,20 +367,24 @@ const InvoiceExportModal = ({
       const isInterState = gstType === "inter";
       const invoiceDate = new Date();
 
-      // Create invoice data
-      const invoiceData: InvoiceItem[] = filtered.map((sub, index) => {
+      // Create invoice data with GST-inclusive calculation
+      const invoiceData: InvoiceItem[] = filtered.map((sub) => {
         const plan = (sub.subscription_plan || "free").toLowerCase();
-        const basePrice = planPricing[plan] || 0;
-        const gst = calculateGST(basePrice, isInterState);
+        const planPrice = planPricing[plan] || 0;
+        const gst = calculateGSTInclusive(planPrice, isInterState);
+        const userId = sub.user_id?.$oid || sub.user_id || sub.id || "";
 
         return {
-          invoiceNumber: generateInvoiceNumber(index, invoiceDate),
+          invoiceNumber: getOrCreateInvoiceNumber(userId),
           invoiceDate: invoiceDate.toISOString().split("T")[0],
           customerName: sub.full_name || sub.name || "N/A",
           customerEmail: sub.user_email || "N/A",
           customerPhone: sub.user_mobile || "N/A",
-          customerCity: sub.user_city || "N/A",
-          customerPincode: sub.user_pincode || "N/A",
+          customerCity: sub.kyc_city || sub.user_city || "N/A",
+          customerState: sub.kyc_state || "N/A",
+          customerAddress: sub.kyc_address || "N/A",
+          customerPincode: sub.kyc_pincode || sub.user_pincode || "N/A",
+          customerDistrict: sub.kyc_city || sub.user_city || "N/A",
           userType: sub.userType === "job_seeker" ? "Job Seeker" : "Worker",
           planName:
             (sub.subscription_plan || "Free").charAt(0).toUpperCase() +
@@ -253,18 +393,19 @@ const InvoiceExportModal = ({
             sub.subscription_starts_at || sub.created_at,
           ),
           subscriptionEndDate: formatDate(sub.subscription_expires_at),
-          basePrice: basePrice,
+          basePrice: gst.base,
           cgstRate: isInterState ? 0 : CGST_RATE,
-          cgstAmount: Math.round(gst.cgst * 100) / 100,
+          cgstAmount: gst.cgst,
           sgstRate: isInterState ? 0 : SGST_RATE,
-          sgstAmount: Math.round(gst.sgst * 100) / 100,
+          sgstAmount: gst.sgst,
           igstRate: isInterState ? IGST_RATE : 0,
-          igstAmount: Math.round(gst.igst * 100) / 100,
+          igstAmount: gst.igst,
           totalGst: Math.round(gst.totalGst * 100) / 100,
-          totalAmount: Math.round(gst.total * 100) / 100,
+          totalAmount: gst.total,
+          roundOff: gst.roundOff,
           paymentId: sub.payment_id || "N/A",
           status: "Active",
-          hsnCode: "998314", // HSN Code for subscription services
+          sacCode: "9983",
         };
       });
 
@@ -282,8 +423,6 @@ const InvoiceExportModal = ({
         ["State", COMPANY_INFO.state],
         ["Pincode", COMPANY_INFO.pincode],
         ["GSTIN", COMPANY_INFO.gstin],
-        ["PAN", COMPANY_INFO.pan],
-        ["Email", COMPANY_INFO.email],
         ["Phone", COMPANY_INFO.phone],
         [""],
         ["Report Generated On", invoiceDate.toLocaleString()],
@@ -334,11 +473,14 @@ const InvoiceExportModal = ({
         "Customer Name",
         "Email",
         "Phone",
+        "Address",
         "City",
+        "District",
+        "State",
         "Pincode",
         "User Type",
         "Plan Name",
-        "HSN Code",
+        "SAC Code",
         "Subscription Start",
         "Subscription End",
         "Base Price (INR)",
@@ -349,7 +491,8 @@ const InvoiceExportModal = ({
         "IGST Rate (%)",
         "IGST Amount (INR)",
         "Total GST (INR)",
-        "Total Amount (INR)",
+        "Round Off (INR)",
+        "Net Amount (INR)",
         "Payment ID",
         "Status",
       ];
@@ -360,11 +503,14 @@ const InvoiceExportModal = ({
         inv.customerName,
         inv.customerEmail,
         inv.customerPhone,
+        inv.customerAddress,
         inv.customerCity,
+        inv.customerDistrict,
+        inv.customerState,
         inv.customerPincode,
         inv.userType,
         inv.planName,
-        inv.hsnCode,
+        inv.sacCode,
         inv.subscriptionStartDate,
         inv.subscriptionEndDate,
         inv.basePrice,
@@ -375,6 +521,7 @@ const InvoiceExportModal = ({
         inv.igstRate,
         inv.igstAmount,
         inv.totalGst,
+        inv.roundOff,
         inv.totalAmount,
         inv.paymentId,
         inv.status,
@@ -392,11 +539,14 @@ const InvoiceExportModal = ({
         { wch: 25 }, // Customer Name
         { wch: 30 }, // Email
         { wch: 15 }, // Phone
+        { wch: 30 }, // Address
         { wch: 15 }, // City
+        { wch: 15 }, // District
+        { wch: 15 }, // State
         { wch: 10 }, // Pincode
         { wch: 12 }, // User Type
         { wch: 12 }, // Plan Name
-        { wch: 10 }, // HSN Code
+        { wch: 10 }, // SAC Code
         { wch: 15 }, // Sub Start
         { wch: 15 }, // Sub End
         { wch: 15 }, // Base Price
@@ -407,7 +557,8 @@ const InvoiceExportModal = ({
         { wch: 12 }, // IGST Rate
         { wch: 15 }, // IGST Amount
         { wch: 15 }, // Total GST
-        { wch: 15 }, // Total Amount
+        { wch: 12 }, // Round Off
+        { wch: 15 }, // Net Amount
         { wch: 25 }, // Payment ID
         { wch: 10 }, // Status
       ];
@@ -880,6 +1031,99 @@ const InvoiceExportModal = ({
                 </select>
               </div>
 
+              {/* Date Range Filter */}
+              <div style={{ marginBottom: "20px" }}>
+                <label
+                  style={{
+                    display: "block",
+                    fontSize: "14px",
+                    fontWeight: "600",
+                    color: theme.colors.text,
+                    marginBottom: "8px",
+                  }}
+                >
+                  <Calendar
+                    size={14}
+                    style={{ marginRight: "6px", verticalAlign: "middle" }}
+                  />
+                  Date Range (Subscription Expiry)
+                </label>
+                <div style={{ display: "flex", gap: "12px" }}>
+                  <div style={{ flex: 1 }}>
+                    <label
+                      style={{
+                        display: "block",
+                        fontSize: "12px",
+                        color: theme.colors.textSecondary,
+                        marginBottom: "4px",
+                      }}
+                    >
+                      From
+                    </label>
+                    <input
+                      type="date"
+                      value={dateFrom}
+                      onChange={(e) => setDateFrom(e.target.value)}
+                      style={{
+                        width: "100%",
+                        padding: "10px 12px",
+                        borderRadius: "8px",
+                        border: `1px solid ${theme.colors.border}`,
+                        fontSize: "14px",
+                        outline: "none",
+                        background: theme.colors.surface,
+                      }}
+                    />
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <label
+                      style={{
+                        display: "block",
+                        fontSize: "12px",
+                        color: theme.colors.textSecondary,
+                        marginBottom: "4px",
+                      }}
+                    >
+                      To
+                    </label>
+                    <input
+                      type="date"
+                      value={dateTo}
+                      onChange={(e) => setDateTo(e.target.value)}
+                      style={{
+                        width: "100%",
+                        padding: "10px 12px",
+                        borderRadius: "8px",
+                        border: `1px solid ${theme.colors.border}`,
+                        fontSize: "14px",
+                        outline: "none",
+                        background: theme.colors.surface,
+                      }}
+                    />
+                  </div>
+                </div>
+                {(dateFrom || dateTo) && (
+                  <button
+                    onClick={() => {
+                      setDateFrom("");
+                      setDateTo("");
+                    }}
+                    style={{
+                      marginTop: "8px",
+                      padding: "4px 12px",
+                      borderRadius: "6px",
+                      border: `1px solid ${theme.colors.border}`,
+                      background: "transparent",
+                      color: theme.colors.textSecondary,
+                      fontSize: "12px",
+                      cursor: "pointer",
+                    }}
+                  >
+                    Clear dates
+                  </button>
+                )}
+              </div>
+
               {/* Preview Count */}
               <div
                 style={{
@@ -1014,290 +1258,313 @@ const SubscriptionDetailModal = ({ subscription, onClose }: any) => {
   const generateInvoicePdf = async () => {
     setIsGeneratingPdf(true);
     try {
-      const paymentId = subscription.payment_id;
-      let paymentData: any = null;
-
-      // Fetch Razorpay payment info if payment_id exists
-      if (paymentId && paymentId !== "N/A" && paymentId !== null) {
-        try {
-          const response = await fetch(
-            `${API_BASE_URL}/admin/razorpay/payment/${paymentId}`,
-            {
-              headers: {
-                Authorization: `Bearer ${localStorage.getItem("accessToken") || localStorage.getItem("token") || ""}`,
-              },
-            },
-          );
-          if (response.ok) {
-            const result = await response.json();
-            paymentData = result.data;
-          }
-        } catch (err) {
-          console.error("Failed to fetch Razorpay payment info:", err);
-        }
+      // Fetch KYC details for location info
+      const userId = subscription.user_id?.$oid || subscription.user_id || subscription.id || "";
+      let kycData: any = null;
+      if (userId) {
+        kycData = await fetchKycDetails(userId);
       }
 
-      // Create PDF
+      // Get customer location details from KYC or fallback
+      const customerName = kycData?.full_name || subscription.full_name || subscription.name || "N/A";
+      const customerAddress = kycData?.address || "";
+      const customerCity = kycData?.city || subscription.user_city || "";
+      const customerState = kycData?.state || COMPANY_INFO.state;
+      const customerPincode = kycData?.pincode || subscription.user_pincode || "";
+      const customerDistrict = kycData?.city || subscription.user_city || "";
+
+      // Determine inter/intra state GST
+      const isInterState = customerState.toLowerCase() !== COMPANY_INFO.state.toLowerCase();
+
+      // GST-inclusive calculation
+      const planPrice = planPricing[plan] || 0;
+      const gst = calculateGSTInclusive(planPrice, isInterState);
+
+      // Get or create persistent invoice number
+      const invoiceNumber = getOrCreateInvoiceNumber(userId);
+      const invoiceDate = new Date();
+      const invoiceDateStr = `${String(invoiceDate.getDate()).padStart(2, "0")}-${String(invoiceDate.getMonth() + 1).padStart(2, "0")}-${invoiceDate.getFullYear()}`;
+
+      // Subscription period
+      const period = getFinancialYearPeriod(subscription.subscription_expires_at || subscription.created_at);
+
+      // Plan display name
+      const planDisplayName =
+        "MENTO " +
+        ((subscription.subscription_plan || "Free").toUpperCase());
+
+      // Create PDF (A4: 210 x 297 mm)
       const doc = new jsPDF();
       const pageWidth = doc.internal.pageSize.getWidth();
-      let y = 20;
+      const LM = 10; // left margin
+      const RM = pageWidth - 10; // right margin
+      const TW = RM - LM; // table width = 190
+      const MID = LM + TW / 2; // midpoint
 
-      // --- Header ---
+      doc.setDrawColor(0);
+      doc.setLineWidth(0.3);
+
+      let y = 10;
+
+      // ===== COMPANY HEADER (no border) =====
       doc.setFontSize(18);
       doc.setFont("helvetica", "bold");
-      doc.text("TAX INVOICE", pageWidth / 2, y, { align: "center" });
-      y += 12;
-
-      // Company details
-      doc.setFontSize(12);
-      doc.setFont("helvetica", "bold");
-      doc.text(COMPANY_INFO.name, pageWidth / 2, y, { align: "center" });
-      y += 6;
-      doc.setFontSize(9);
-      doc.setFont("helvetica", "normal");
-      doc.text(
-        `${COMPANY_INFO.address}, ${COMPANY_INFO.city}, ${COMPANY_INFO.state} - ${COMPANY_INFO.pincode}`,
-        pageWidth / 2,
-        y,
-        { align: "center" },
-      );
-      y += 5;
-      doc.text(
-        `GSTIN: ${COMPANY_INFO.gstin} | PAN: ${COMPANY_INFO.pan}`,
-        pageWidth / 2,
-        y,
-        { align: "center" },
-      );
-      y += 5;
-      doc.text(
-        `Email: ${COMPANY_INFO.email} | Phone: ${COMPANY_INFO.phone}`,
-        pageWidth / 2,
-        y,
-        { align: "center" },
-      );
-      y += 8;
-
-      // Divider
-      doc.setDrawColor(200);
-      doc.setLineWidth(0.5);
-      doc.line(15, y, pageWidth - 15, y);
-      y += 8;
-
-      // Invoice info
-      const invoiceDate = new Date();
-      const invoiceNumber = `MENTO/${invoiceDate.getFullYear()}${String(invoiceDate.getMonth() + 1).padStart(2, "0")}/${String(Math.floor(Math.random() * 99999)).padStart(5, "0")}`;
-
-      doc.setFontSize(10);
-      doc.setFont("helvetica", "bold");
-      doc.text("Invoice Number:", 15, y);
-      doc.setFont("helvetica", "normal");
-      doc.text(invoiceNumber, 60, y);
-      doc.setFont("helvetica", "bold");
-      doc.text("Invoice Date:", pageWidth / 2 + 10, y);
-      doc.setFont("helvetica", "normal");
-      doc.text(invoiceDate.toLocaleDateString("en-IN"), pageWidth / 2 + 50, y);
-      y += 12;
-
-      // --- Customer Details ---
-      doc.setFontSize(11);
-      doc.setFont("helvetica", "bold");
-      doc.text("Bill To:", 15, y);
-      y += 6;
-      doc.setFontSize(10);
-      doc.setFont("helvetica", "normal");
-
-      const customerName = subscription.full_name || subscription.name || "N/A";
-      const customerEmail = subscription.user_email || "N/A";
-      const customerPhone = subscription.user_mobile || "N/A";
-      const customerCity = subscription.user_city || "N/A";
-      const customerPincode = subscription.user_pincode || "";
-
-      doc.text(`Name: ${customerName}`, 15, y);
-      y += 5;
-      doc.text(`Email: ${customerEmail}`, 15, y);
-      y += 5;
-      doc.text(`Phone: ${customerPhone}`, 15, y);
-      y += 5;
-      doc.text(
-        `Location: ${customerCity}${customerPincode ? ` - ${customerPincode}` : ""}`,
-        15,
-        y,
-      );
-      y += 5;
-      doc.text(
-        `User Type: ${subscription.userType === "job_seeker" ? "Job Seeker" : "Worker"}`,
-        15,
-        y,
-      );
+      doc.text(COMPANY_INFO.name, pageWidth / 2, y + 6, { align: "center" });
       y += 10;
-
-      // Divider
-      doc.line(15, y, pageWidth - 15, y);
-      y += 8;
-
-      // --- Subscription Details Table ---
-      const basePrice =
-        planPricing[plan] || 0;
-      const gst = (() => {
-        if (basePrice === 0)
-          return { cgst: 0, sgst: 0, igst: 0, totalGst: 0, total: 0 };
-        const cgst = (basePrice * CGST_RATE) / 100;
-        const sgst = (basePrice * SGST_RATE) / 100;
-        return {
-          cgst,
-          sgst,
-          igst: 0,
-          totalGst: cgst + sgst,
-          total: basePrice + cgst + sgst,
-        };
-      })();
-
-      // Table header
-      doc.setFillColor(240, 240, 240);
-      doc.rect(15, y, pageWidth - 30, 8, "F");
       doc.setFontSize(9);
-      doc.setFont("helvetica", "bold");
-      doc.text("Description", 17, y + 5.5);
-      doc.text("HSN", 85, y + 5.5);
-      doc.text("Base (INR)", 105, y + 5.5);
-      doc.text("CGST", 130, y + 5.5);
-      doc.text("SGST", 150, y + 5.5);
-      doc.text("Total (INR)", 170, y + 5.5);
-      y += 10;
-
-      // Table row
       doc.setFont("helvetica", "normal");
-      const planDisplayName =
-        (subscription.subscription_plan || "Free").charAt(0).toUpperCase() +
-        (subscription.subscription_plan || "free").slice(1);
-
-      const startDate = subscription.subscription_starts_at || subscription.created_at;
-      const endDate = subscription.subscription_expires_at;
-      const formatDateStr = (dateValue: any): string => {
-        if (!dateValue) return "N/A";
-        try {
-          const date = new Date(dateValue.$date || dateValue);
-          if (isNaN(date.getTime())) return "N/A";
-          return date.toLocaleDateString("en-IN");
-        } catch {
-          return "N/A";
-        }
-      };
-
-      doc.text(`${planDisplayName} Plan`, 17, y + 5);
-      doc.setFontSize(7);
-      doc.text(
-        `(${formatDateStr(startDate)} to ${formatDateStr(endDate)})`,
-        17,
-        y + 9,
-      );
-      doc.setFontSize(9);
-      doc.text("998314", 85, y + 5);
-      doc.text(`${basePrice.toFixed(2)}`, 105, y + 5);
-      doc.text(`${gst.cgst.toFixed(2)}`, 130, y + 5);
-      doc.text(`${gst.sgst.toFixed(2)}`, 150, y + 5);
-      doc.text(`${gst.total.toFixed(2)}`, 170, y + 5);
-      y += 14;
-
-      // Divider
-      doc.line(15, y, pageWidth - 15, y);
+      doc.text(COMPANY_INFO.address, pageWidth / 2, y + 4, { align: "center" });
+      y += 5;
+      doc.text(`Dist:${COMPANY_INFO.district}, ${COMPANY_INFO.pincode}`, pageWidth / 2, y + 4, { align: "center" });
+      y += 5;
+      doc.text(`Mo:${COMPANY_INFO.phone}`, pageWidth / 2, y + 4, { align: "center" });
+      y += 5;
+      doc.text(`GSTIN : ${COMPANY_INFO.gstin}`, pageWidth / 2, y + 4, { align: "center" });
       y += 6;
 
-      // Totals
+      // TAX INVOICE title
       doc.setFontSize(10);
-      doc.setFont("helvetica", "normal");
-      doc.text("Subtotal:", 130, y);
-      doc.text(`${basePrice.toFixed(2)}`, 170, y);
-      y += 6;
-      doc.text(`CGST @ ${CGST_RATE}%:`, 130, y);
-      doc.text(`${gst.cgst.toFixed(2)}`, 170, y);
-      y += 6;
-      doc.text(`SGST @ ${SGST_RATE}%:`, 130, y);
-      doc.text(`${gst.sgst.toFixed(2)}`, 170, y);
-      y += 6;
       doc.setFont("helvetica", "bold");
-      doc.text("Grand Total:", 130, y);
-      doc.text(`INR ${gst.total.toFixed(2)}`, 170, y);
-      y += 12;
-
-      // Divider
-      doc.line(15, y, pageWidth - 15, y);
-      y += 8;
-
-      // --- Payment Details ---
-      doc.setFontSize(11);
-      doc.setFont("helvetica", "bold");
-      doc.text("Payment Details:", 15, y);
+      doc.text("TAX INVOICE", pageWidth / 2, y + 4, { align: "center" });
       y += 7;
-      doc.setFontSize(10);
-      doc.setFont("helvetica", "normal");
 
-      if (paymentData) {
-        doc.text(`Payment ID: ${paymentData.id || paymentId || "N/A"}`, 15, y);
-        y += 5;
+      // ===== INVOICE INFO ROW =====
+      const invRowH = 14;
+      doc.rect(LM, y, TW, invRowH);
+      doc.line(MID - 5, y, MID - 5, y + invRowH); // vertical divider
+
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "bold");
+      doc.text("Invoice No:", LM + 2, y + 5);
+      doc.setFont("helvetica", "normal");
+      doc.text(invoiceNumber, LM + 28, y + 5);
+      doc.setFont("helvetica", "bold");
+      doc.text("Invoice Date:", LM + 2, y + 11);
+      doc.setFont("helvetica", "normal");
+      doc.text(invoiceDateStr, LM + 32, y + 11);
+
+      doc.setFont("helvetica", "bold");
+      doc.text("Period:", MID - 3, y + 5);
+      doc.setFont("helvetica", "normal");
+      doc.text(period, MID + 12, y + 5);
+      y += invRowH;
+
+      // ===== BUYER / CONSIGNEE ROW =====
+      const buyerH = 38;
+      doc.rect(LM, y, TW, buyerH);
+      doc.line(MID, y, MID, y + buyerH);
+
+      // Buyer (left)
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "bold");
+      doc.text("Buyer:", LM + 2, y + 5);
+      doc.text("M/S,", LM + 2, y + 11);
+      doc.setFont("helvetica", "normal");
+      doc.text(customerName.toUpperCase(), LM + 16, y + 11);
+      if (customerAddress) {
+        doc.text(customerAddress.toUpperCase(), LM + 16, y + 16);
+      }
+      if (customerCity || customerDistrict) {
         doc.text(
-          `Method: ${(paymentData.method || "N/A").toUpperCase()}`,
-          15,
-          y,
+          `${customerCity ? customerCity.toUpperCase() + ", " : ""}${customerDistrict ? customerDistrict.toUpperCase() : ""}`,
+          LM + 16,
+          y + 21,
         );
-        y += 5;
-        doc.text(
-          `Status: ${(paymentData.status || "N/A").toUpperCase()}`,
-          15,
-          y,
-        );
-        y += 5;
-        if (paymentData.bank) {
-          doc.text(`Bank: ${paymentData.bank}`, 15, y);
-          y += 5;
-        }
-        if (paymentData.vpa) {
-          doc.text(`UPI ID: ${paymentData.vpa}`, 15, y);
-          y += 5;
-        }
-        if (paymentData.wallet) {
-          doc.text(`Wallet: ${paymentData.wallet}`, 15, y);
-          y += 5;
-        }
-        const amountPaid = paymentData.amount
-          ? (paymentData.amount / 100).toFixed(2)
-          : "N/A";
-        doc.text(`Amount Paid: INR ${amountPaid}`, 15, y);
-        y += 5;
-        doc.text(`Currency: ${paymentData.currency || "INR"}`, 15, y);
-        y += 5;
-        if (paymentData.created_at) {
-          const paidDate = new Date(
-            paymentData.created_at * 1000,
-          ).toLocaleString("en-IN");
-          doc.text(`Paid On: ${paidDate}`, 15, y);
-          y += 5;
-        }
-      } else {
-        doc.text(
-          `Payment ID: ${paymentId || "N/A"}`,
-          15,
-          y,
-        );
-        y += 5;
-        doc.text("Status: Payment information not available", 15, y);
-        y += 5;
+      }
+      if (customerPincode) {
+        doc.text(`DIST, ${customerDistrict.toUpperCase()} ${customerPincode}`, LM + 16, y + 26);
       }
 
-      y += 10;
+      // Consignee (right)
+      doc.setFont("helvetica", "bold");
+      doc.text("Consignee:", MID + 2, y + 5);
+      doc.text("M/s,", MID + 2, y + 11);
+      doc.setFont("helvetica", "normal");
+      doc.text(customerName.toUpperCase(), MID + 16, y + 11);
+      if (customerAddress) {
+        doc.text(customerAddress.toUpperCase(), MID + 16, y + 16);
+      }
+      if (customerCity || customerDistrict) {
+        doc.text(
+          `${customerCity ? customerCity.toUpperCase() + ", " : ""}${customerDistrict ? customerDistrict.toUpperCase() : ""}`,
+          MID + 16,
+          y + 21,
+        );
+      }
+      if (customerPincode) {
+        doc.text(`DIST, ${customerDistrict.toUpperCase()} ${customerPincode}`, MID + 16, y + 26);
+      }
+      y += buyerH;
 
-      // Footer
-      doc.setDrawColor(200);
-      doc.line(15, y, pageWidth - 15, y);
-      y += 8;
+      // ===== STATE / STATE CODE / GSTIN ROW =====
+      const stateRowH = 14;
+      doc.rect(LM, y, TW, stateRowH);
+      doc.setFont("helvetica", "bold");
+      doc.text("State:", LM + 2, y + 5);
+      doc.setFont("helvetica", "normal");
+      doc.text(customerState, LM + 18, y + 5);
+      doc.setFont("helvetica", "bold");
+      doc.text("State Code", LM + 58, y + 5);
+      doc.setFont("helvetica", "normal");
+      doc.text(customerState.toLowerCase() === "gujarat" ? "24" : "", LM + 82, y + 5);
+      doc.setFont("helvetica", "bold");
+      doc.text("GSTIN:", LM + 2, y + 11);
+      y += stateRowH;
+
+      // ===== ITEMS TABLE HEADER =====
+      const colX = [LM, LM + 20, LM + 75, LM + 105, LM + 125, LM + 140, LM + 160, RM];
+      const colHeaders = ["Sr.No.", "Description Of Goods", "SAC Code", "Qty.", "Unit", "Rate", "Amount"];
+      const headerH = 8;
+
+      doc.setFillColor(240, 240, 240);
+      doc.rect(LM, y, TW, headerH, "FD");
+      doc.setFontSize(7);
+      doc.setFont("helvetica", "bold");
+      for (let i = 0; i < colHeaders.length; i++) {
+        doc.text(colHeaders[i], colX[i] + 2, y + 5.5);
+        if (i < colHeaders.length) {
+          doc.line(colX[i], y, colX[i], y + headerH);
+        }
+      }
+      doc.line(RM, y, RM, y + headerH);
+      y += headerH;
+
+      // ===== ITEMS TABLE ROW =====
+      const itemRowH = 40; // enough space for item + empty rows
+      doc.rect(LM, y, TW, itemRowH);
+      for (let i = 0; i < colX.length; i++) {
+        doc.line(colX[i], y, colX[i], y + itemRowH);
+      }
+      doc.line(RM, y, RM, y + itemRowH);
+
       doc.setFontSize(8);
+      doc.setFont("helvetica", "normal");
+      // Row data
+      const itemY = y + 10;
+      doc.text("1", colX[0] + 8, itemY, { align: "center" });
+      doc.text(planDisplayName, colX[1] + 2, itemY);
+      doc.text("9983", colX[2] + 2, itemY);
+      doc.text("1.000", colX[3] + 2, itemY);
+      doc.text("1", colX[4] + 2, itemY);
+      doc.text(gst.base.toFixed(2), colX[5] + 2, itemY);
+      doc.text(gst.base.toFixed(2), colX[6] + 2, itemY);
+
+      // Subtotal line at bottom of item area
+      const subTotalY = y + itemRowH;
+      doc.rect(LM, subTotalY, TW, 7);
+      for (let i = 0; i < colX.length; i++) {
+        doc.line(colX[i], subTotalY, colX[i], subTotalY + 7);
+      }
+      doc.line(RM, subTotalY, RM, subTotalY + 7);
+      doc.setFont("helvetica", "bold");
+      doc.text(gst.base.toFixed(2), colX[6] + 2, subTotalY + 5);
+      y = subTotalY + 7;
+
+      // ===== AMOUNT IN WORDS + GST SUMMARY =====
+      const gstSummaryH = 40;
+      doc.rect(LM, y, TW, gstSummaryH);
+      const gstDivX = LM + 110;
+      doc.line(gstDivX, y, gstDivX, y + gstSummaryH);
+
+      // Left side: Amount in words
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "bold");
+      doc.text("Amount In Words:", LM + 2, y + 6);
+      doc.setFont("helvetica", "normal");
+      doc.text(numberToWords(Math.round(gst.total)), LM + 35, y + 6);
+
+      // Right side: GST breakdown
+      let gstY = y + 6;
+      const gstLabelX = gstDivX + 2;
+      const gstPctX = gstDivX + 28;
+      const gstAmtX = RM - 2;
+
+      doc.setFont("helvetica", "bold");
+      doc.text("SGST", gstLabelX, gstY);
+      doc.text(`${SGST_RATE}.00%`, gstPctX, gstY);
+      doc.text(isInterState ? "" : gst.sgst.toFixed(2), gstAmtX, gstY, { align: "right" });
+      doc.line(gstDivX, gstY + 2, RM, gstY + 2);
+      gstY += 8;
+
+      doc.text("CGST", gstLabelX, gstY);
+      doc.text(`${CGST_RATE}.00%`, gstPctX, gstY);
+      doc.text(isInterState ? "" : gst.cgst.toFixed(2), gstAmtX, gstY, { align: "right" });
+      doc.line(gstDivX, gstY + 2, RM, gstY + 2);
+      gstY += 8;
+
+      doc.text("IGST", gstLabelX, gstY);
+      doc.text(`${IGST_RATE}%`, gstPctX, gstY);
+      doc.text(isInterState ? gst.igst.toFixed(2) : "", gstAmtX, gstY, { align: "right" });
+      doc.line(gstDivX, gstY + 2, RM, gstY + 2);
+      gstY += 8;
+
+      doc.text("Round Off", gstLabelX, gstY);
+      doc.text(gst.roundOff.toFixed(2), gstAmtX, gstY, { align: "right" });
+      doc.line(gstDivX, gstY + 2, RM, gstY + 2);
+      gstY += 8;
+
+      doc.setFont("helvetica", "bold");
+      doc.text("Net Amount", gstLabelX, gstY);
+      doc.text(gst.total.toFixed(2), gstAmtX, gstY, { align: "right" });
+      y += gstSummaryH;
+
+      // ===== BANK DETAILS + AUTHORISED SIGNATURE =====
+      const bankH = 50;
+      doc.rect(LM, y, TW, bankH);
+      doc.line(MID, y, MID, y + bankH);
+
+      // Left: Bank details
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "bold");
+      doc.text("Bank Deitails:-", LM + 2, y + 6);
+      let bankY = y + 12;
+      doc.setFont("helvetica", "bold");
+      doc.text("BANK", LM + 2, bankY);
+      doc.setFont("helvetica", "normal");
+      doc.text(BANK_DETAILS.bank, LM + 30, bankY);
+      bankY += 6;
+      doc.setFont("helvetica", "bold");
+      doc.text("BRANCH:", LM + 2, bankY);
+      doc.setFont("helvetica", "normal");
+      doc.text(BANK_DETAILS.branch, LM + 30, bankY);
+      bankY += 6;
+      doc.setFont("helvetica", "bold");
+      doc.text("A/C", LM + 2, bankY);
+      doc.setFont("helvetica", "normal");
+      doc.text(BANK_DETAILS.accountNo, LM + 30, bankY);
+      bankY += 6;
+      doc.setFont("helvetica", "bold");
+      doc.text("IFSC", LM + 2, bankY);
+      doc.setFont("helvetica", "normal");
+      doc.text(BANK_DETAILS.ifsc, LM + 30, bankY);
+
+      // Right: For, Company + Authorised Signature
+      doc.setFont("helvetica", "normal");
+      doc.text("For,", MID + 2, y + 6);
+      doc.setFont("helvetica", "bold");
+      doc.text(COMPANY_INFO.name, MID + 20, y + 12);
       doc.setFont("helvetica", "italic");
-      doc.text(
-        "This is a computer-generated invoice and does not require a physical signature.",
-        pageWidth / 2,
-        y,
-        { align: "center" },
-      );
+      doc.text("Authorised Signature", RM - 5, y + bankH - 5, { align: "right" });
+      y += bankH;
+
+      // ===== TERMS =====
+      const termsH = 12;
+      doc.rect(LM, y, TW, termsH);
+      doc.setFontSize(8);
+      doc.setFont("helvetica", "bold");
+      doc.text("Terms:", LM + 2, y + 5);
+      doc.setFont("helvetica", "normal");
+      doc.text("Subject to Satlasana Jurisdiction Only", LM + 2, y + 10);
+      y += termsH;
+
+      // ===== FOOTER =====
+      const footerH = 8;
+      doc.rect(LM, y, TW, footerH);
+      doc.setFontSize(7);
+      doc.setFont("helvetica", "bold");
+      doc.text("E.& O.E.", LM + 2, y + 5);
+      doc.setFont("helvetica", "italic");
+      doc.text("This is Computer Generate Invoice", pageWidth / 2, y + 5, { align: "center" });
 
       // Save PDF
       doc.save(
@@ -1968,22 +2235,24 @@ export const Subscriptions = () => {
     enterprise: 0,
   });
 
-  // Helper function to fetch user data by user_id
+  // Helper function to fetch user data by user_id (includes KYC location data)
   const fetchUserData = async (userId: string) => {
     try {
-      const userResponse = await fetch(
-        `${API_BASE_URL}/admin/users/${userId}`,
-        {
-          headers: {
-            Authorization: `Bearer ${localStorage.getItem("accessToken") || localStorage.getItem("token") || ""}`,
-          },
-        },
-      );
+      const authHeader = {
+        Authorization: `Bearer ${localStorage.getItem("accessToken") || localStorage.getItem("token") || ""}`,
+      };
+
+      // Fetch user data and KYC data in parallel
+      const [userResponse, kycResponse] = await Promise.all([
+        fetch(`${API_BASE_URL}/admin/users/${userId}`, { headers: authHeader }),
+        fetch(`${API_BASE_URL}/kyc/admin/user/${userId}`, { headers: authHeader }).catch(() => null),
+      ]);
+
+      let userData: any = {};
       if (userResponse.ok) {
-        const userData = await userResponse.json();
-        // Handle both possible response structures
-        const user = userData.data?.user || userData.data;
-        return {
+        const result = await userResponse.json();
+        const user = result.data?.user || result.data;
+        userData = {
           user_mobile: user?.mobile,
           user_photo: user?.profile_photo,
           user_email: user?.email,
@@ -1993,6 +2262,21 @@ export const Subscriptions = () => {
           user_kyc_status: user?.kyc_status,
         };
       }
+
+      // Merge KYC location data if available
+      if (kycResponse && kycResponse.ok) {
+        const kycResult = await kycResponse.json();
+        const kyc = kycResult.data;
+        if (kyc && kyc.kyc_exists !== false) {
+          userData.kyc_address = kyc.address;
+          userData.kyc_city = kyc.city;
+          userData.kyc_state = kyc.state;
+          userData.kyc_pincode = kyc.pincode;
+          userData.kyc_full_name = kyc.full_name;
+        }
+      }
+
+      return userData;
     } catch (err) {
       console.error("Error fetching user data:", err);
     }

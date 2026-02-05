@@ -121,6 +121,7 @@ fn rocket() -> Rocket<Build> {
                 routes::kyc::get_all_kyc_submissions,
                 routes::kyc::get_kyc_by_id,
                 routes::kyc::update_kyc_status,
+                routes::kyc::get_kyc_by_user_id,
                 // Subscription (NEW)
                 routes::worker::create_subscription,
                 routes::worker::verify_subscription_payment,

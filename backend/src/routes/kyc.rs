@@ -124,6 +124,29 @@ pub async fn get_kyc_status(
     }
 }
 
+// Get full KYC details by user_id (for invoice generation)
+#[openapi(tag = "KYC")]
+#[get("/kyc/admin/user/<user_id>")]
+pub async fn get_kyc_by_user_id(
+    db: &State<DbConn>,
+    user_id: String,
+) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
+    let object_id = ObjectId::parse_str(&user_id)
+        .map_err(|_| ApiError::bad_request("Invalid user ID"))?;
+
+    let kyc = db.collection::<Kyc>("kycs")
+        .find_one(doc! { "user_id": object_id }, None)
+        .await
+        .map_err(|e| ApiError::internal_error(format!("Database error: {}", e)))?;
+
+    match kyc {
+        Some(kyc) => Ok(Json(ApiResponse::success(serde_json::json!(kyc)))),
+        None => Ok(Json(ApiResponse::success(serde_json::json!({
+            "kyc_exists": false
+        })))),
+    }
+}
+
 // Admin endpoints
 #[derive(FromForm, serde::Deserialize, rocket_okapi::okapi::schemars::JsonSchema)]
 pub struct KycListQuery {
