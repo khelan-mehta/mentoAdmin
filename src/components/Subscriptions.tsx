@@ -367,12 +367,24 @@ const InvoiceExportModal = ({
       const isInterState = gstType === "inter";
       const invoiceDate = new Date();
 
-      // Create invoice data with GST-inclusive calculation
+      // Create invoice data with GST-inclusive calculation (full precision, no rounding)
       const invoiceData: InvoiceItem[] = filtered.map((sub) => {
         const plan = (sub.subscription_plan || "free").toLowerCase();
         const planPrice = planPricing[plan] || 0;
-        const gst = calculateGSTInclusive(planPrice, isInterState);
         const userId = sub.user_id?.$oid || sub.user_id || sub.id || "";
+
+        // Determine inter/intra state from user's KYC state
+        const userState = (sub.kyc_state || "").toLowerCase();
+        const companyState = COMPANY_INFO.state.toLowerCase();
+        const isUserInterState = userState && userState !== companyState;
+        const useInterState = isInterState || isUserInterState;
+
+        // Full-precision GST calculation (plan price is inclusive of GST)
+        const base = planPrice > 0 ? planPrice / (1 + GST_RATE / 100) : 0;
+        const cgstAmt = useInterState ? 0 : base * CGST_RATE / 100;
+        const sgstAmt = useInterState ? 0 : base * SGST_RATE / 100;
+        const igstAmt = useInterState ? base * IGST_RATE / 100 : 0;
+        const totalGstAmt = cgstAmt + sgstAmt + igstAmt;
 
         return {
           invoiceNumber: getOrCreateInvoiceNumber(userId),
@@ -393,19 +405,19 @@ const InvoiceExportModal = ({
             sub.subscription_starts_at || sub.created_at,
           ),
           subscriptionEndDate: formatDate(sub.subscription_expires_at),
-          basePrice: gst.base,
-          cgstRate: isInterState ? 0 : CGST_RATE,
-          cgstAmount: gst.cgst,
-          sgstRate: isInterState ? 0 : SGST_RATE,
-          sgstAmount: gst.sgst,
-          igstRate: isInterState ? IGST_RATE : 0,
-          igstAmount: gst.igst,
-          totalGst: Math.round(gst.totalGst * 100) / 100,
-          totalAmount: gst.total,
-          roundOff: gst.roundOff,
+          basePrice: base,
+          cgstRate: useInterState ? 0 : CGST_RATE,
+          cgstAmount: cgstAmt,
+          sgstRate: useInterState ? 0 : SGST_RATE,
+          sgstAmount: sgstAmt,
+          igstRate: useInterState ? IGST_RATE : 0,
+          igstAmount: igstAmt,
+          totalGst: totalGstAmt,
+          totalAmount: planPrice,
+          roundOff: 0,
           paymentId: sub.payment_id || "N/A",
           status: "Active",
-          sacCode: "9983",
+          sacCode: "998314",
         };
       });
 
@@ -466,24 +478,20 @@ const InvoiceExportModal = ({
 
       XLSX.utils.book_append_sheet(workbook, summarySheet, "Summary");
 
-      // Sheet 2: Detailed Invoices
+      // Sheet 2: Detailed Invoices (matching tax invoice format)
       const invoiceHeaders = [
         "Invoice Number",
         "Invoice Date",
         "Customer Name",
         "Email",
         "Phone",
-        "Address",
         "City",
-        "District",
         "State",
         "Pincode",
         "User Type",
         "Plan Name",
         "SAC Code",
-        "Subscription Start",
-        "Subscription End",
-        "Base Price (INR)",
+        "Taxable Amount",
         "CGST Rate (%)",
         "CGST Amount (INR)",
         "SGST Rate (%)",
@@ -491,8 +499,7 @@ const InvoiceExportModal = ({
         "IGST Rate (%)",
         "IGST Amount (INR)",
         "Total GST (INR)",
-        "Round Off (INR)",
-        "Net Amount (INR)",
+        "Total (INR)",
         "Payment ID",
         "Status",
       ];
@@ -503,25 +510,20 @@ const InvoiceExportModal = ({
         inv.customerName,
         inv.customerEmail,
         inv.customerPhone,
-        inv.customerAddress,
         inv.customerCity,
-        inv.customerDistrict,
         inv.customerState,
         inv.customerPincode,
         inv.userType,
         inv.planName,
         inv.sacCode,
-        inv.subscriptionStartDate,
-        inv.subscriptionEndDate,
         inv.basePrice,
-        inv.cgstRate,
-        inv.cgstAmount,
-        inv.sgstRate,
-        inv.sgstAmount,
-        inv.igstRate,
-        inv.igstAmount,
+        inv.cgstRate || "",
+        inv.cgstAmount || "",
+        inv.sgstRate || "",
+        inv.sgstAmount || "",
+        inv.igstRate || "",
+        inv.igstAmount || "",
         inv.totalGst,
-        inv.roundOff,
         inv.totalAmount,
         inv.paymentId,
         inv.status,
@@ -534,31 +536,26 @@ const InvoiceExportModal = ({
 
       // Set column widths for detail
       detailSheet["!cols"] = [
-        { wch: 20 }, // Invoice Number
+        { wch: 22 }, // Invoice Number
         { wch: 12 }, // Invoice Date
-        { wch: 25 }, // Customer Name
-        { wch: 30 }, // Email
+        { wch: 20 }, // Customer Name
+        { wch: 20 }, // Email
         { wch: 15 }, // Phone
-        { wch: 30 }, // Address
         { wch: 15 }, // City
-        { wch: 15 }, // District
         { wch: 15 }, // State
         { wch: 10 }, // Pincode
         { wch: 12 }, // User Type
         { wch: 12 }, // Plan Name
         { wch: 10 }, // SAC Code
-        { wch: 15 }, // Sub Start
-        { wch: 15 }, // Sub End
-        { wch: 15 }, // Base Price
-        { wch: 12 }, // CGST Rate
-        { wch: 15 }, // CGST Amount
-        { wch: 12 }, // SGST Rate
-        { wch: 15 }, // SGST Amount
-        { wch: 12 }, // IGST Rate
-        { wch: 15 }, // IGST Amount
-        { wch: 15 }, // Total GST
-        { wch: 12 }, // Round Off
-        { wch: 15 }, // Net Amount
+        { wch: 18 }, // Taxable Amount
+        { wch: 14 }, // CGST Rate
+        { wch: 18 }, // CGST Amount
+        { wch: 14 }, // SGST Rate
+        { wch: 18 }, // SGST Amount
+        { wch: 14 }, // IGST Rate
+        { wch: 18 }, // IGST Amount
+        { wch: 18 }, // Total GST
+        { wch: 15 }, // Total
         { wch: 25 }, // Payment ID
         { wch: 10 }, // Status
       ];
@@ -1443,7 +1440,7 @@ const SubscriptionDetailModal = ({ subscription, onClose }: any) => {
       const itemY = y + 10;
       doc.text("1", colX[0] + 8, itemY, { align: "center" });
       doc.text(planDisplayName, colX[1] + 2, itemY);
-      doc.text("9983", colX[2] + 2, itemY);
+      doc.text("998314", colX[2] + 2, itemY);
       doc.text("1.000", colX[3] + 2, itemY);
       doc.text("1", colX[4] + 2, itemY);
       doc.text(gst.base.toFixed(2), colX[5] + 2, itemY);
