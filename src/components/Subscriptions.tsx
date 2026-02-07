@@ -136,42 +136,109 @@ const getOrCreateInvoiceNumber = (userId: string): string => {
 // Calculate GST (plan price is INCLUSIVE of GST - base is derived)
 const calculateGSTInclusive = (planPrice: number, isInterState: boolean) => {
   if (planPrice === 0) {
-    return { base: 0, cgst: 0, sgst: 0, igst: 0, totalGst: 0, total: 0, roundOff: 0 };
+    return {
+      base: 0,
+      cgst: 0,
+      sgst: 0,
+      igst: 0,
+      totalGst: 0,
+      total: 0,
+      roundOff: 0,
+    };
   }
   const base = Math.round((planPrice / (1 + GST_RATE / 100)) * 100) / 100;
   if (isInterState) {
-    const igst = Math.round((base * IGST_RATE) / 100 * 100) / 100;
+    const igst = Math.round(((base * IGST_RATE) / 100) * 100) / 100;
     const roundOff = Math.round((planPrice - base - igst) * 100) / 100;
-    return { base, cgst: 0, sgst: 0, igst, totalGst: igst, total: planPrice, roundOff };
+    return {
+      base,
+      cgst: 0,
+      sgst: 0,
+      igst,
+      totalGst: igst,
+      total: planPrice,
+      roundOff,
+    };
   } else {
-    const cgst = Math.round((base * CGST_RATE) / 100 * 100) / 100;
-    const sgst = Math.round((base * SGST_RATE) / 100 * 100) / 100;
+    const cgst = Math.round(((base * CGST_RATE) / 100) * 100) / 100;
+    const sgst = Math.round(((base * SGST_RATE) / 100) * 100) / 100;
     const roundOff = Math.round((planPrice - base - cgst - sgst) * 100) / 100;
-    return { base, cgst, sgst, igst: 0, totalGst: cgst + sgst, total: planPrice, roundOff };
+    return {
+      base,
+      cgst,
+      sgst,
+      igst: 0,
+      totalGst: cgst + sgst,
+      total: planPrice,
+      roundOff,
+    };
   }
 };
 
 // Number to words (Indian format)
 const numberToWords = (num: number): string => {
   const ones = [
-    "", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine",
-    "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen",
-    "Seventeen", "Eighteen", "Nineteen",
+    "",
+    "One",
+    "Two",
+    "Three",
+    "Four",
+    "Five",
+    "Six",
+    "Seven",
+    "Eight",
+    "Nine",
+    "Ten",
+    "Eleven",
+    "Twelve",
+    "Thirteen",
+    "Fourteen",
+    "Fifteen",
+    "Sixteen",
+    "Seventeen",
+    "Eighteen",
+    "Nineteen",
   ];
   const tens = [
-    "", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety",
+    "",
+    "",
+    "Twenty",
+    "Thirty",
+    "Forty",
+    "Fifty",
+    "Sixty",
+    "Seventy",
+    "Eighty",
+    "Ninety",
   ];
   if (num === 0) return "Zero Only";
   const convert = (n: number): string => {
     if (n < 20) return ones[n];
-    if (n < 100) return tens[Math.floor(n / 10)] + (n % 10 ? " " + ones[n % 10] : "");
+    if (n < 100)
+      return tens[Math.floor(n / 10)] + (n % 10 ? " " + ones[n % 10] : "");
     if (n < 1000)
-      return ones[Math.floor(n / 100)] + " Hundred" + (n % 100 ? " " + convert(n % 100) : "");
+      return (
+        ones[Math.floor(n / 100)] +
+        " Hundred" +
+        (n % 100 ? " " + convert(n % 100) : "")
+      );
     if (n < 100000)
-      return convert(Math.floor(n / 1000)) + " Thousand" + (n % 1000 ? " " + convert(n % 1000) : "");
+      return (
+        convert(Math.floor(n / 1000)) +
+        " Thousand" +
+        (n % 1000 ? " " + convert(n % 1000) : "")
+      );
     if (n < 10000000)
-      return convert(Math.floor(n / 100000)) + " Lakh" + (n % 100000 ? " " + convert(n % 100000) : "");
-    return convert(Math.floor(n / 10000000)) + " Crore" + (n % 10000000 ? " " + convert(n % 10000000) : "");
+      return (
+        convert(Math.floor(n / 100000)) +
+        " Lakh" +
+        (n % 100000 ? " " + convert(n % 100000) : "")
+      );
+    return (
+      convert(Math.floor(n / 10000000)) +
+      " Crore" +
+      (n % 10000000 ? " " + convert(n % 10000000) : "")
+    );
   };
   const rupees = Math.floor(num);
   const paise = Math.round((num - rupees) * 100);
@@ -207,14 +274,11 @@ const getFinancialYearPeriod = (dateValue: any): string => {
 // Fetch KYC details for a user
 const fetchKycDetails = async (userId: string): Promise<any> => {
   try {
-    const response = await fetch(
-      `${API_BASE_URL}/kyc/admin/user/${userId}`,
-      {
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("accessToken") || localStorage.getItem("token") || ""}`,
-        },
+    const response = await fetch(`${API_BASE_URL}/kyc/admin/user/${userId}`, {
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem("accessToken") || localStorage.getItem("token") || ""}`,
       },
-    );
+    });
     if (response.ok) {
       const result = await response.json();
       if (result.data && result.data.kyc_exists !== false) {
@@ -381,9 +445,9 @@ const InvoiceExportModal = ({
 
         // Full-precision GST calculation (plan price is inclusive of GST)
         const base = planPrice > 0 ? planPrice / (1 + GST_RATE / 100) : 0;
-        const cgstAmt = useInterState ? 0 : base * CGST_RATE / 100;
-        const sgstAmt = useInterState ? 0 : base * SGST_RATE / 100;
-        const igstAmt = useInterState ? base * IGST_RATE / 100 : 0;
+        const cgstAmt = useInterState ? 0 : (base * CGST_RATE) / 100;
+        const sgstAmt = useInterState ? 0 : (base * SGST_RATE) / 100;
+        const igstAmt = useInterState ? (base * IGST_RATE) / 100 : 0;
         const totalGstAmt = cgstAmt + sgstAmt + igstAmt;
 
         return {
@@ -1256,22 +1320,32 @@ const SubscriptionDetailModal = ({ subscription, onClose }: any) => {
     setIsGeneratingPdf(true);
     try {
       // Fetch KYC details for location info
-      const userId = subscription.user_id?.$oid || subscription.user_id || subscription.id || "";
+      const userId =
+        subscription.user_id?.$oid ||
+        subscription.user_id ||
+        subscription.id ||
+        "";
       let kycData: any = null;
       if (userId) {
         kycData = await fetchKycDetails(userId);
       }
 
       // Get customer location details from KYC or fallback
-      const customerName = kycData?.full_name || subscription.full_name || subscription.name || "N/A";
+      const customerName =
+        kycData?.full_name ||
+        subscription.full_name ||
+        subscription.name ||
+        "N/A";
       const customerAddress = kycData?.address || "";
       const customerCity = kycData?.city || subscription.user_city || "";
       const customerState = kycData?.state || COMPANY_INFO.state;
-      const customerPincode = kycData?.pincode || subscription.user_pincode || "";
+      const customerPincode =
+        kycData?.pincode || subscription.user_pincode || "";
       const customerDistrict = kycData?.city || subscription.user_city || "";
 
       // Determine inter/intra state GST
-      const isInterState = customerState.toLowerCase() !== COMPANY_INFO.state.toLowerCase();
+      const isInterState =
+        customerState.toLowerCase() !== COMPANY_INFO.state.toLowerCase();
 
       // GST-inclusive calculation
       const planPrice = planPricing[plan] || 0;
@@ -1283,12 +1357,13 @@ const SubscriptionDetailModal = ({ subscription, onClose }: any) => {
       const invoiceDateStr = `${String(invoiceDate.getDate()).padStart(2, "0")}-${String(invoiceDate.getMonth() + 1).padStart(2, "0")}-${invoiceDate.getFullYear()}`;
 
       // Subscription period
-      const period = getFinancialYearPeriod(subscription.subscription_expires_at || subscription.created_at);
+      const period = getFinancialYearPeriod(
+        subscription.subscription_expires_at || subscription.created_at,
+      );
 
       // Plan display name
       const planDisplayName =
-        "MENTO " +
-        ((subscription.subscription_plan || "Free").toUpperCase());
+        "MENTO " + (subscription.subscription_plan || "Free").toUpperCase();
 
       // Create PDF (A4: 210 x 297 mm)
       const doc = new jsPDF();
@@ -1312,11 +1387,20 @@ const SubscriptionDetailModal = ({ subscription, onClose }: any) => {
       doc.setFont("helvetica", "normal");
       doc.text(COMPANY_INFO.address, pageWidth / 2, y + 4, { align: "center" });
       y += 5;
-      doc.text(`Dist:${COMPANY_INFO.district}, ${COMPANY_INFO.pincode}`, pageWidth / 2, y + 4, { align: "center" });
+      doc.text(
+        `Dist:${COMPANY_INFO.district}, ${COMPANY_INFO.pincode}`,
+        pageWidth / 2,
+        y + 4,
+        { align: "center" },
+      );
       y += 5;
-      doc.text(`Mo:${COMPANY_INFO.phone}`, pageWidth / 2, y + 4, { align: "center" });
+      doc.text(`Mo:${COMPANY_INFO.phone}`, pageWidth / 2, y + 4, {
+        align: "center",
+      });
       y += 5;
-      doc.text(`GSTIN : ${COMPANY_INFO.gstin}`, pageWidth / 2, y + 4, { align: "center" });
+      doc.text(`GSTIN : ${COMPANY_INFO.gstin}`, pageWidth / 2, y + 4, {
+        align: "center",
+      });
       y += 6;
 
       // TAX INVOICE title
@@ -1369,7 +1453,11 @@ const SubscriptionDetailModal = ({ subscription, onClose }: any) => {
         );
       }
       if (customerPincode) {
-        doc.text(`DIST, ${customerDistrict.toUpperCase()} ${customerPincode}`, LM + 16, y + 26);
+        doc.text(
+          `DIST, ${customerDistrict.toUpperCase()} ${customerPincode}`,
+          LM + 16,
+          y + 26,
+        );
       }
 
       // Consignee (right)
@@ -1389,7 +1477,11 @@ const SubscriptionDetailModal = ({ subscription, onClose }: any) => {
         );
       }
       if (customerPincode) {
-        doc.text(`DIST, ${customerDistrict.toUpperCase()} ${customerPincode}`, MID + 16, y + 26);
+        doc.text(
+          `DIST, ${customerDistrict.toUpperCase()} ${customerPincode}`,
+          MID + 16,
+          y + 26,
+        );
       }
       y += buyerH;
 
@@ -1403,14 +1495,35 @@ const SubscriptionDetailModal = ({ subscription, onClose }: any) => {
       doc.setFont("helvetica", "bold");
       doc.text("State Code", LM + 58, y + 5);
       doc.setFont("helvetica", "normal");
-      doc.text(customerState.toLowerCase() === "gujarat" ? "24" : "", LM + 82, y + 5);
+      doc.text(
+        customerState.toLowerCase() === "gujarat" ? "24" : "",
+        LM + 82,
+        y + 5,
+      );
       doc.setFont("helvetica", "bold");
       doc.text("GSTIN:", LM + 2, y + 11);
       y += stateRowH;
 
       // ===== ITEMS TABLE HEADER =====
-      const colX = [LM, LM + 20, LM + 75, LM + 105, LM + 125, LM + 140, LM + 160, RM];
-      const colHeaders = ["Sr.No.", "Description Of Goods", "SAC Code", "Qty.", "Unit", "Rate", "Amount"];
+      const colX = [
+        LM,
+        LM + 20,
+        LM + 75,
+        LM + 105,
+        LM + 125,
+        LM + 140,
+        LM + 160,
+        RM,
+      ];
+      const colHeaders = [
+        "Sr.No.",
+        "Description Of Goods",
+        "SAC Code",
+        "Qty.",
+        "Unit",
+        "Rate",
+        "Amount",
+      ];
       const headerH = 8;
 
       doc.setFillColor(240, 240, 240);
@@ -1479,19 +1592,25 @@ const SubscriptionDetailModal = ({ subscription, onClose }: any) => {
       doc.setFont("helvetica", "bold");
       doc.text("SGST", gstLabelX, gstY);
       doc.text(`${SGST_RATE}.00%`, gstPctX, gstY);
-      doc.text(isInterState ? "" : gst.sgst.toFixed(2), gstAmtX, gstY, { align: "right" });
+      doc.text(isInterState ? "" : gst.sgst.toFixed(2), gstAmtX, gstY, {
+        align: "right",
+      });
       doc.line(gstDivX, gstY + 2, RM, gstY + 2);
       gstY += 8;
 
       doc.text("CGST", gstLabelX, gstY);
       doc.text(`${CGST_RATE}.00%`, gstPctX, gstY);
-      doc.text(isInterState ? "" : gst.cgst.toFixed(2), gstAmtX, gstY, { align: "right" });
+      doc.text(isInterState ? "" : gst.cgst.toFixed(2), gstAmtX, gstY, {
+        align: "right",
+      });
       doc.line(gstDivX, gstY + 2, RM, gstY + 2);
       gstY += 8;
 
       doc.text("IGST", gstLabelX, gstY);
       doc.text(`${IGST_RATE}%`, gstPctX, gstY);
-      doc.text(isInterState ? gst.igst.toFixed(2) : "", gstAmtX, gstY, { align: "right" });
+      doc.text(isInterState ? gst.igst.toFixed(2) : "", gstAmtX, gstY, {
+        align: "right",
+      });
       doc.line(gstDivX, gstY + 2, RM, gstY + 2);
       gstY += 8;
 
@@ -1541,7 +1660,9 @@ const SubscriptionDetailModal = ({ subscription, onClose }: any) => {
       doc.setFont("helvetica", "bold");
       doc.text(COMPANY_INFO.name, MID + 20, y + 12);
       doc.setFont("helvetica", "italic");
-      doc.text("Authorised Signature", RM - 5, y + bankH - 5, { align: "right" });
+      doc.text("Authorised Signature", RM - 5, y + bankH - 5, {
+        align: "right",
+      });
       y += bankH;
 
       // ===== TERMS =====
@@ -1561,7 +1682,9 @@ const SubscriptionDetailModal = ({ subscription, onClose }: any) => {
       doc.setFont("helvetica", "bold");
       doc.text("E.& O.E.", LM + 2, y + 5);
       doc.setFont("helvetica", "italic");
-      doc.text("This is Computer Generate Invoice", pageWidth / 2, y + 5, { align: "center" });
+      doc.text("This is Computer Generate Invoice", pageWidth / 2, y + 5, {
+        align: "center",
+      });
 
       // Save PDF
       doc.save(
@@ -2242,7 +2365,9 @@ export const Subscriptions = () => {
       // Fetch user data and KYC data in parallel
       const [userResponse, kycResponse] = await Promise.all([
         fetch(`${API_BASE_URL}/admin/users/${userId}`, { headers: authHeader }),
-        fetch(`${API_BASE_URL}/kyc/admin/user/${userId}`, { headers: authHeader }).catch(() => null),
+        fetch(`${API_BASE_URL}/kyc/admin/user/${userId}`, {
+          headers: authHeader,
+        }).catch(() => null),
       ]);
 
       let userData: any = {};
