@@ -1,5 +1,5 @@
 use crate::db::DbConn;
-use crate::models::{CategoryResponse, MainCategory, SubCategory, SubCategoryResponse, WorkerProfile, JobSeekerProfile, User, Subscription};
+use crate::models::{CategoryResponse, MainCategory, SubCategory, SubCategoryResponse, WorkerProfile, JobSeekerProfile, User, Subscription, SubscriptionType, SubscriptionStatus};
 use crate::utils::{ApiError, ApiResponse};
 use mongodb::bson::{doc, DateTime, oid::ObjectId};
 use mongodb::options::FindOptions;
@@ -1064,4 +1064,603 @@ pub async fn get_razorpay_payment(
         .map_err(|e| ApiError::internal_error(format!("Failed to parse payment response: {}", e)))?;
 
     Ok(Json(ApiResponse::success(payment_data)))
+}
+
+// ==================== SUBSCRIPTION ADMIN ROUTES ====================
+
+#[derive(FromForm, serde::Deserialize, rocket_okapi::okapi::schemars::JsonSchema)]
+pub struct SubscriptionListQuery {
+    pub subscription_type: Option<String>,
+    pub status: Option<String>,
+    pub page: Option<i64>,
+    pub limit: Option<i64>,
+    pub search: Option<String>,
+}
+
+#[openapi(tag = "Admin - Subscriptions")]
+#[get("/admin/subscriptions?<query..>")]
+pub async fn get_all_subscriptions(
+    db: &State<DbConn>,
+    query: SubscriptionListQuery,
+) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
+    let page = query.page.unwrap_or(1).max(1);
+    let limit = query.limit.unwrap_or(20).min(100);
+    let skip = (page - 1) * limit;
+
+    let mut filter = doc! {};
+    if let Some(ref sub_type) = query.subscription_type {
+        filter.insert("subscription_type", sub_type);
+    }
+    if let Some(ref status) = query.status {
+        filter.insert("status", status);
+    }
+
+    let find_options = FindOptions::builder()
+        .skip(skip as u64)
+        .limit(limit)
+        .sort(doc! { "created_at": -1 })
+        .build();
+
+    let mut cursor = db.collection::<Subscription>("subscriptions")
+        .find(filter.clone(), find_options)
+        .await
+        .map_err(|e| ApiError::internal_error(format!("Database error: {}", e)))?;
+
+    let mut subscriptions = Vec::new();
+    while cursor.advance().await.map_err(|e| ApiError::internal_error(format!("Cursor error: {}", e)))? {
+        let sub = cursor.deserialize_current()
+            .map_err(|e| ApiError::internal_error(format!("Deserialization error: {}", e)))?;
+        subscriptions.push(sub);
+    }
+
+    // Enrich with user data
+    let mut subscriptions_with_user_data = Vec::new();
+    for sub in &subscriptions {
+        let mut sub_json = serde_json::to_value(sub)
+            .map_err(|e| ApiError::internal_error(format!("Serialization error: {}", e)))?;
+
+        if let Ok(Some(user)) = db.collection::<User>("users")
+            .find_one(doc! { "_id": sub.user_id }, None)
+            .await
+        {
+            if let Some(obj) = sub_json.as_object_mut() {
+                obj.insert("user_name".to_string(), serde_json::json!(user.name));
+                obj.insert("user_mobile".to_string(), serde_json::json!(user.mobile));
+                obj.insert("user_email".to_string(), serde_json::json!(user.email));
+            }
+        }
+
+        subscriptions_with_user_data.push(sub_json);
+    }
+
+    // If search is provided, filter by user name/mobile/email
+    let final_subscriptions = if let Some(ref search_term) = query.search {
+        if !search_term.is_empty() {
+            let term = search_term.to_lowercase();
+            subscriptions_with_user_data
+                .into_iter()
+                .filter(|s| {
+                    let name = s.get("user_name").and_then(|v| v.as_str()).unwrap_or("");
+                    let mobile = s.get("user_mobile").and_then(|v| v.as_str()).unwrap_or("");
+                    let email = s.get("user_email").and_then(|v| v.as_str()).unwrap_or("");
+                    name.to_lowercase().contains(&term)
+                        || mobile.contains(&term)
+                        || email.to_lowercase().contains(&term)
+                })
+                .collect()
+        } else {
+            subscriptions_with_user_data
+        }
+    } else {
+        subscriptions_with_user_data
+    };
+
+    let total = db.collection::<Subscription>("subscriptions")
+        .count_documents(filter, None)
+        .await
+        .map_err(|e| ApiError::internal_error(format!("Count error: {}", e)))?;
+
+    Ok(Json(ApiResponse::success(serde_json::json!({
+        "subscriptions": final_subscriptions,
+        "pagination": {
+            "page": page,
+            "limit": limit,
+            "total": total,
+            "pages": (total as f64 / limit as f64).ceil() as i64,
+        }
+    }))))
+}
+
+#[derive(serde::Deserialize, rocket_okapi::okapi::schemars::JsonSchema)]
+pub struct CreateSubscriptionDto {
+    pub user_id: String,
+    pub subscription_type: String,  // "worker" or "jobseeker"
+    pub plan_name: String,          // "silver", "gold", "job_seeker_premium"
+    pub price: f64,
+    pub duration_days: Option<i64>, // defaults to 30
+    pub payment_id: Option<String>,
+    pub auto_renew: Option<bool>,
+}
+
+#[openapi(tag = "Admin - Subscriptions")]
+#[post("/admin/subscriptions", data = "<dto>")]
+pub async fn create_subscription(
+    db: &State<DbConn>,
+    dto: Json<CreateSubscriptionDto>,
+) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
+    let user_object_id = ObjectId::parse_str(&dto.user_id)
+        .map_err(|_| ApiError::bad_request("Invalid user ID"))?;
+
+    // Verify user exists
+    db.collection::<User>("users")
+        .find_one(doc! { "_id": user_object_id }, None)
+        .await
+        .map_err(|e| ApiError::internal_error(format!("Database error: {}", e)))?
+        .ok_or_else(|| ApiError::not_found("User not found"))?;
+
+    let subscription_type = match dto.subscription_type.to_lowercase().as_str() {
+        "worker" => "worker",
+        "jobseeker" | "job_seeker" => "jobseeker",
+        _ => return Err(ApiError::bad_request("Invalid subscription type. Use 'worker' or 'jobseeker'")),
+    };
+
+    let now = DateTime::now();
+    let duration_days = dto.duration_days.unwrap_or(30);
+    let expires_at_millis = now.timestamp_millis() + (duration_days * 24 * 60 * 60 * 1000);
+    let expires_at = DateTime::from_millis(expires_at_millis);
+
+    let subscription = Subscription {
+        id: None,
+        user_id: user_object_id,
+        subscription_type: if subscription_type == "worker" {
+            SubscriptionType::Worker
+        } else {
+            SubscriptionType::JobSeeker
+        },
+        plan_name: dto.plan_name.clone(),
+        price: dto.price,
+        status: SubscriptionStatus::Active,
+        starts_at: now,
+        expires_at,
+        auto_renew: dto.auto_renew.unwrap_or(false),
+        payment_id: dto.payment_id.clone(),
+        created_at: now,
+        updated_at: now,
+    };
+
+    let result = db.collection::<Subscription>("subscriptions")
+        .insert_one(&subscription, None)
+        .await
+        .map_err(|e| ApiError::internal_error(format!("Failed to create subscription: {}", e)))?;
+
+    // Also update the user's subscription fields
+    let mut user_update = doc! {
+        "subscription_plan": &dto.plan_name,
+        "subscription_id": result.inserted_id.as_object_id().unwrap(),
+        "subscription_expires_at": expires_at,
+        "updated_at": now,
+    };
+
+    db.collection::<User>("users")
+        .update_one(
+            doc! { "_id": user_object_id },
+            doc! { "$set": user_update },
+            None,
+        )
+        .await
+        .map_err(|e| ApiError::internal_error(format!("Failed to update user subscription: {}", e)))?;
+
+    // Update the corresponding profile's subscription fields
+    if subscription_type == "worker" {
+        let _ = db.collection::<WorkerProfile>("worker_profiles")
+            .update_one(
+                doc! { "user_id": user_object_id },
+                doc! { "$set": {
+                    "subscription_plan": &dto.plan_name,
+                    "subscription_expires_at": expires_at,
+                    "updated_at": now,
+                }},
+                None,
+            )
+            .await;
+    } else {
+        let _ = db.collection::<JobSeekerProfile>("job_seeker_profiles")
+            .update_one(
+                doc! { "user_id": user_object_id },
+                doc! { "$set": {
+                    "subscription_plan": &dto.plan_name,
+                    "subscription_expires_at": expires_at,
+                    "updated_at": now,
+                }},
+                None,
+            )
+            .await;
+    }
+
+    Ok(Json(ApiResponse::success_with_message(
+        "Subscription created successfully".to_string(),
+        serde_json::json!({
+            "id": result.inserted_id.as_object_id().unwrap().to_hex()
+        })
+    )))
+}
+
+#[derive(serde::Deserialize, rocket_okapi::okapi::schemars::JsonSchema)]
+pub struct UpdateSubscriptionDto {
+    pub plan_name: Option<String>,
+    pub price: Option<f64>,
+    pub status: Option<String>,          // "active", "expired", "cancelled", "pending"
+    pub auto_renew: Option<bool>,
+    pub duration_days: Option<i64>,      // Extend by N days from now
+    pub payment_id: Option<String>,
+}
+
+#[openapi(tag = "Admin - Subscriptions")]
+#[put("/admin/subscriptions/<subscription_id>", data = "<dto>")]
+pub async fn update_subscription(
+    db: &State<DbConn>,
+    subscription_id: String,
+    dto: Json<UpdateSubscriptionDto>,
+) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
+    let object_id = ObjectId::parse_str(&subscription_id)
+        .map_err(|_| ApiError::bad_request("Invalid subscription ID"))?;
+
+    let now = DateTime::now();
+    let mut update_doc = doc! {
+        "updated_at": now,
+    };
+
+    if let Some(ref plan_name) = dto.plan_name {
+        update_doc.insert("plan_name", plan_name);
+    }
+    if let Some(price) = dto.price {
+        update_doc.insert("price", price);
+    }
+    if let Some(ref status) = dto.status {
+        update_doc.insert("status", status);
+    }
+    if let Some(auto_renew) = dto.auto_renew {
+        update_doc.insert("auto_renew", auto_renew);
+    }
+    if let Some(ref payment_id) = dto.payment_id {
+        update_doc.insert("payment_id", payment_id);
+    }
+    if let Some(duration_days) = dto.duration_days {
+        let expires_at_millis = now.timestamp_millis() + (duration_days * 24 * 60 * 60 * 1000);
+        let expires_at = DateTime::from_millis(expires_at_millis);
+        update_doc.insert("expires_at", expires_at);
+    }
+
+    db.collection::<Subscription>("subscriptions")
+        .update_one(
+            doc! { "_id": object_id },
+            doc! { "$set": update_doc },
+            None
+        )
+        .await
+        .map_err(|e| ApiError::internal_error(format!("Failed to update subscription: {}", e)))?;
+
+    // Also sync changes to user/profile if plan_name or status changed
+    if let Ok(Some(sub)) = db.collection::<Subscription>("subscriptions")
+        .find_one(doc! { "_id": object_id }, None)
+        .await
+    {
+        let mut user_update = doc! { "updated_at": now };
+
+        if dto.plan_name.is_some() {
+            user_update.insert("subscription_plan", &sub.plan_name);
+        }
+        if dto.duration_days.is_some() {
+            user_update.insert("subscription_expires_at", sub.expires_at);
+        }
+
+        if !user_update.keys().collect::<Vec<_>>().is_empty() {
+            let _ = db.collection::<User>("users")
+                .update_one(
+                    doc! { "_id": sub.user_id },
+                    doc! { "$set": &user_update },
+                    None,
+                )
+                .await;
+
+            // Determine subscription type and update corresponding profile
+            let sub_type = serde_json::to_value(&sub.subscription_type)
+                .ok()
+                .and_then(|v| v.as_str().map(|s| s.to_string()))
+                .unwrap_or_default();
+
+            if sub_type == "worker" {
+                let _ = db.collection::<WorkerProfile>("worker_profiles")
+                    .update_one(
+                        doc! { "user_id": sub.user_id },
+                        doc! { "$set": {
+                            "subscription_plan": &sub.plan_name,
+                            "subscription_expires_at": sub.expires_at,
+                            "updated_at": now,
+                        }},
+                        None,
+                    )
+                    .await;
+            } else {
+                let _ = db.collection::<JobSeekerProfile>("job_seeker_profiles")
+                    .update_one(
+                        doc! { "user_id": sub.user_id },
+                        doc! { "$set": {
+                            "subscription_plan": &sub.plan_name,
+                            "subscription_expires_at": sub.expires_at,
+                            "updated_at": now,
+                        }},
+                        None,
+                    )
+                    .await;
+            }
+        }
+    }
+
+    Ok(Json(ApiResponse::success(serde_json::json!({
+        "message": "Subscription updated successfully"
+    }))))
+}
+
+#[openapi(tag = "Admin - Subscriptions")]
+#[delete("/admin/subscriptions/<subscription_id>")]
+pub async fn delete_subscription(
+    db: &State<DbConn>,
+    subscription_id: String,
+) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
+    let object_id = ObjectId::parse_str(&subscription_id)
+        .map_err(|_| ApiError::bad_request("Invalid subscription ID"))?;
+
+    // Fetch subscription before deleting to clean up user/profile fields
+    if let Ok(Some(sub)) = db.collection::<Subscription>("subscriptions")
+        .find_one(doc! { "_id": object_id }, None)
+        .await
+    {
+        let now = DateTime::now();
+
+        // Clear subscription fields on user
+        let _ = db.collection::<User>("users")
+            .update_one(
+                doc! { "_id": sub.user_id },
+                doc! { "$set": {
+                    "subscription_plan": serde_json::Value::Null.to_string(),
+                    "subscription_id": serde_json::Value::Null.to_string(),
+                    "subscription_expires_at": serde_json::Value::Null.to_string(),
+                    "updated_at": now,
+                }},
+                None,
+            )
+            .await;
+
+        // Clear subscription fields on profile
+        let sub_type = serde_json::to_value(&sub.subscription_type)
+            .ok()
+            .and_then(|v| v.as_str().map(|s| s.to_string()))
+            .unwrap_or_default();
+
+        if sub_type == "worker" {
+            let _ = db.collection::<WorkerProfile>("worker_profiles")
+                .update_one(
+                    doc! { "user_id": sub.user_id },
+                    doc! { "$set": {
+                        "subscription_plan": "none",
+                        "updated_at": now,
+                    }, "$unset": {
+                        "subscription_expires_at": "",
+                    }},
+                    None,
+                )
+                .await;
+        } else {
+            let _ = db.collection::<JobSeekerProfile>("job_seeker_profiles")
+                .update_one(
+                    doc! { "user_id": sub.user_id },
+                    doc! { "$set": {
+                        "subscription_plan": "free",
+                        "updated_at": now,
+                    }, "$unset": {
+                        "subscription_expires_at": "",
+                    }},
+                    None,
+                )
+                .await;
+        }
+    }
+
+    db.collection::<Subscription>("subscriptions")
+        .delete_one(doc! { "_id": object_id }, None)
+        .await
+        .map_err(|e| ApiError::internal_error(format!("Failed to delete subscription: {}", e)))?;
+
+    Ok(Json(ApiResponse::success(serde_json::json!({
+        "message": "Subscription deleted successfully"
+    }))))
+}
+
+// ==================== ADMIN SERVICES CRUD ROUTES ====================
+
+#[derive(FromForm, serde::Deserialize, rocket_okapi::okapi::schemars::JsonSchema)]
+pub struct ServiceListQuery {
+    pub page: Option<i64>,
+    pub limit: Option<i64>,
+    pub search: Option<String>,
+    pub category: Option<String>,
+}
+
+#[openapi(tag = "Admin - Services")]
+#[get("/admin/services?<query..>")]
+pub async fn get_all_services_admin(
+    db: &State<DbConn>,
+    query: ServiceListQuery,
+) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
+    let page = query.page.unwrap_or(1).max(1);
+    let limit = query.limit.unwrap_or(50).min(200);
+    let skip = (page - 1) * limit;
+
+    let mut filter = doc! {};
+    if let Some(ref category) = query.category {
+        if !category.is_empty() {
+            filter.insert("serviceCategory", category);
+        }
+    }
+    if let Some(ref search_term) = query.search {
+        if !search_term.is_empty() {
+            filter.insert("$or", vec![
+                doc! { "name": { "$regex": search_term, "$options": "i" } },
+                doc! { "description": { "$regex": search_term, "$options": "i" } },
+                doc! { "serviceCategory": { "$regex": search_term, "$options": "i" } },
+            ]);
+        }
+    }
+
+    let find_options = FindOptions::builder()
+        .skip(skip as u64)
+        .limit(limit)
+        .sort(doc! { "serviceCategory": 1, "name": 1 })
+        .build();
+
+    let mut cursor = db.collection::<Service>("services")
+        .find(filter.clone(), find_options)
+        .await
+        .map_err(|e| ApiError::internal_error(format!("Database error: {}", e)))?;
+
+    let mut services = Vec::new();
+    while cursor.advance().await.map_err(|e| ApiError::internal_error(format!("Cursor error: {}", e)))? {
+        let service = cursor.deserialize_current()
+            .map_err(|e| ApiError::internal_error(format!("Deserialization error: {}", e)))?;
+        services.push(service);
+    }
+
+    let total = db.collection::<Service>("services")
+        .count_documents(filter, None)
+        .await
+        .map_err(|e| ApiError::internal_error(format!("Count error: {}", e)))?;
+
+    // Get all unique categories for filter dropdown
+    let categories = db.collection::<Service>("services")
+        .distinct("serviceCategory", None, None)
+        .await
+        .map_err(|e| ApiError::internal_error(format!("Database error: {}", e)))?;
+
+    let category_list: Vec<String> = categories
+        .iter()
+        .filter_map(|b| b.as_str().map(|s| s.to_string()))
+        .collect();
+
+    Ok(Json(ApiResponse::success(serde_json::json!({
+        "services": services,
+        "categories": category_list,
+        "pagination": {
+            "page": page,
+            "limit": limit,
+            "total": total,
+            "pages": (total as f64 / limit as f64).ceil() as i64,
+        }
+    }))))
+}
+
+#[derive(serde::Deserialize, rocket_okapi::okapi::schemars::JsonSchema)]
+pub struct CreateServiceDto {
+    pub name: String,
+    pub service_category: String,
+    pub price: Option<String>,
+    pub description: Option<String>,
+    pub icon: Option<String>,
+    pub color: Option<String>,
+    pub rating: Option<String>,
+}
+
+#[openapi(tag = "Admin - Services")]
+#[post("/admin/services", data = "<dto>")]
+pub async fn create_service_admin(
+    db: &State<DbConn>,
+    dto: Json<CreateServiceDto>,
+) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
+    let service = Service {
+        id: ObjectId::new(),
+        service_id: format!("SRV-{}", ObjectId::new().to_hex()),
+        name: dto.name.clone(),
+        service_category: dto.service_category.clone(),
+        price: dto.price.clone().unwrap_or_else(|| "0".to_string()),
+        rating: dto.rating.clone().unwrap_or_else(|| "0.0".to_string()),
+        description: dto.description.clone().unwrap_or_default(),
+        icon: dto.icon.clone().unwrap_or_default(),
+        color: dto.color.clone().unwrap_or_else(|| "#0EA5E9".to_string()),
+    };
+
+    let result = db.collection::<Service>("services")
+        .insert_one(&service, None)
+        .await
+        .map_err(|e| ApiError::internal_error(format!("Failed to create service: {}", e)))?;
+
+    Ok(Json(ApiResponse::success_with_message(
+        "Service created successfully".to_string(),
+        serde_json::json!({
+            "id": result.inserted_id.as_object_id().unwrap().to_hex()
+        })
+    )))
+}
+
+#[openapi(tag = "Admin - Services")]
+#[put("/admin/services/<service_id>", data = "<dto>")]
+pub async fn update_service_admin(
+    db: &State<DbConn>,
+    service_id: String,
+    dto: Json<CreateServiceDto>,
+) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
+    let object_id = ObjectId::parse_str(&service_id)
+        .map_err(|_| ApiError::bad_request("Invalid service ID"))?;
+
+    let mut update_doc = doc! {
+        "name": &dto.name,
+        "serviceCategory": &dto.service_category,
+    };
+
+    if let Some(ref desc) = dto.description {
+        update_doc.insert("description", desc);
+    }
+    if let Some(ref price) = dto.price {
+        update_doc.insert("price", price);
+    }
+    if let Some(ref rating) = dto.rating {
+        update_doc.insert("rating", rating);
+    }
+    if let Some(ref icon) = dto.icon {
+        update_doc.insert("icon", icon);
+    }
+    if let Some(ref color) = dto.color {
+        update_doc.insert("color", color);
+    }
+
+    db.collection::<Service>("services")
+        .update_one(
+            doc! { "_id": object_id },
+            doc! { "$set": update_doc },
+            None
+        )
+        .await
+        .map_err(|e| ApiError::internal_error(format!("Failed to update service: {}", e)))?;
+
+    Ok(Json(ApiResponse::success(serde_json::json!({
+        "message": "Service updated successfully"
+    }))))
+}
+
+#[openapi(tag = "Admin - Services")]
+#[delete("/admin/services/<service_id>")]
+pub async fn delete_service_admin(
+    db: &State<DbConn>,
+    service_id: String,
+) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
+    let object_id = ObjectId::parse_str(&service_id)
+        .map_err(|_| ApiError::bad_request("Invalid service ID"))?;
+
+    db.collection::<Service>("services")
+        .delete_one(doc! { "_id": object_id }, None)
+        .await
+        .map_err(|e| ApiError::internal_error(format!("Failed to delete service: {}", e)))?;
+
+    Ok(Json(ApiResponse::success(serde_json::json!({
+        "message": "Service deleted successfully"
+    }))))
 }
