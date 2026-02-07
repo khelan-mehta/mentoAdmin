@@ -196,6 +196,16 @@ fn rocket() -> Rocket<Build> {
                 routes::admin::get_worker_by_id,
                 routes::admin::update_worker,
                 routes::admin::delete_worker,
+                // Admin Routes - Subscriptions
+                routes::admin::get_all_subscriptions,
+                routes::admin::create_subscription,
+                routes::admin::update_subscription,
+                routes::admin::delete_subscription,
+                // Admin Routes - Services (CRUD)
+                routes::admin::get_all_services_admin,
+                routes::admin::create_service_admin,
+                routes::admin::update_service_admin,
+                routes::admin::delete_service_admin,
                 // Admin Routes - Razorpay
                 routes::admin::get_razorpay_payment,
                 // Notification Routes
