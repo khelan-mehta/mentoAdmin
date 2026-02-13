@@ -307,6 +307,6 @@ export const initialServices = [
   },
 ];
 
-export const BASE_URL_2 = "http://localhost:8000/api/v1";
+export const BASE_URL_2  = "http://localhost:8000/api/v1";
 
 export const BASE_URL = "https://api.mentoservices.com/api/v1";

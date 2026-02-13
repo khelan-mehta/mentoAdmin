@@ -1,17 +1,21 @@
-use mongodb::bson::oid::ObjectId;
-use rocket::serde::json::Json;
-use rocket::{State, Request};
-use rocket_okapi::openapi;
-use mongodb::bson::{doc, DateTime};
-use mongodb::options::FindOptions;
 use crate::db::DbConn;
-use crate::models::{CreateWorkerProfileDto, Subscription, WorkerSubscriptionPlan, UpdateWorkerProfileDto, WorkerProfile, SubscriptionType, SubscriptionStatus, NearbyWorkerQuery, GeoLocation, UpdateLocationDto};
 use crate::guards::{AuthGuard, KycGuard};
-use crate::utils::{ApiResponse, ApiError};
-use hmac::{Hmac, Mac};
-use sha2::Sha256;
+use crate::models::{
+    CreateWorkerProfileDto, GeoLocation, NearbyWorkerQuery, Subscription, SubscriptionStatus,
+    SubscriptionType, UpdateLocationDto, UpdateWorkerProfileDto, WorkerProfile,
+    WorkerSubscriptionPlan,
+};
 use crate::services::RazorpayService;
+use crate::utils::{ApiError, ApiResponse};
+use hmac::{Hmac, Mac};
+use mongodb::bson::oid::ObjectId;
+use mongodb::bson::{DateTime, doc};
+use mongodb::options::FindOptions;
 use rocket::http::Status;
+use rocket::serde::json::Json;
+use rocket::{Request, State};
+use rocket_okapi::openapi;
+use sha2::Sha256;
 
 // ============================================================================
 // SUBSCRIPTION ENDPOINTS (Fixed)
@@ -32,21 +36,24 @@ pub async fn create_subscription(
 ) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
     // Validate plan and get price
     let (price, plan_type) = match plan_name.to_lowercase().as_str() {
-        "silver" => (1.0, WorkerSubscriptionPlan::Silver),
-        "gold" => (2.0, WorkerSubscriptionPlan::Gold),
-        _ => return Err(ApiError::bad_request("Invalid plan. Choose 'silver' or 'gold'")),
+        "silver" => (499.0, WorkerSubscriptionPlan::Silver),
+        "gold" => (799.0, WorkerSubscriptionPlan::Gold),
+        _ => {
+            return Err(ApiError::bad_request(
+                "Invalid plan. Choose 'silver' or 'gold'",
+            ));
+        }
     };
 
     let now = DateTime::now();
-    let expires_at = DateTime::from_millis(
-        chrono::Utc::now().timestamp_millis() + 365 * 24 * 60 * 60 * 1000,
-    );
- 
+    let expires_at =
+        DateTime::from_millis(chrono::Utc::now().timestamp_millis() + 365 * 24 * 60 * 60 * 1000);
+
     // Check if user already has an active subscription (worker)
     let existing = db
         .collection::<Subscription>("subscriptions")
         .find_one(
-            doc! { 
+            doc! {
                 "user_id": auth.user_id,
                 "subscription_type": "worker",
                 "status": "active"
@@ -57,7 +64,9 @@ pub async fn create_subscription(
         .map_err(|e| ApiError::internal_error(e.to_string()))?;
 
     if existing.is_some() {
-        return Err(ApiError::bad_request("You already have an active subscription"));
+        return Err(ApiError::bad_request(
+            "You already have an active subscription",
+        ));
     }
 
     // Create Razorpay order first
@@ -87,7 +96,9 @@ pub async fn create_subscription(
         .await
         .map_err(|e| ApiError::internal_error(format!("Failed to create subscription: {}", e)))?;
 
-    let subscription_id = sub_res.inserted_id.as_object_id()
+    let subscription_id = sub_res
+        .inserted_id
+        .as_object_id()
         .ok_or_else(|| ApiError::internal_error("Invalid subscription ID"))?
         .to_hex();
 
@@ -121,11 +132,7 @@ pub async fn verify_subscription_payment(
     let secret = std::env::var("RAZORPAY_KEY_SECRET")
         .map_err(|_| ApiError::internal_error("Missing Razorpay secret"))?;
 
-    let payload = format!(
-        "{}|{}",
-        dto.razorpay_order_id,
-        dto.razorpay_payment_id
-    );
+    let payload = format!("{}|{}", dto.razorpay_order_id, dto.razorpay_payment_id);
 
     let mut mac = Hmac::<Sha256>::new_from_slice(secret.as_bytes())
         .map_err(|_| ApiError::internal_error("Invalid HMAC key"))?;
@@ -206,10 +213,9 @@ pub async fn verify_subscription_payment(
             None,
         )
         .await
-        .map_err(|e| ApiError::internal_error(format!(
-            "Failed to update user subscription: {}",
-            e
-        )))?;
+        .map_err(|e| {
+            ApiError::internal_error(format!("Failed to update user subscription: {}", e))
+        })?;
 
     /* ------------------------------------------------------------------ */
     /* 5. RESPONSE                                                         */
@@ -232,11 +238,10 @@ pub async fn get_subscription_status(
     db: &State<DbConn>,
     auth: AuthGuard,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
-    
     let subscription = db
         .collection::<Subscription>("subscriptions")
         .find_one(
-            doc! { 
+            doc! {
                 "user_id": auth.user_id,
                 "subscription_type": "worker",
                 "status": "active"
@@ -277,12 +282,12 @@ pub async fn create_worker_profile(
     dto: Json<CreateWorkerProfileDto>,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
     let auth = kyc_guard.auth;
-    
+
     // Check if user has active subscription (worker)
     let has_subscription = db
         .collection::<Subscription>("subscriptions")
         .find_one(
-            doc! { 
+            doc! {
                 "user_id": auth.user_id,
                 "subscription_type": "worker",
                 "status": "active"
@@ -293,7 +298,9 @@ pub async fn create_worker_profile(
         .map_err(|e| ApiError::internal_error(e.to_string()))?;
 
     if has_subscription.is_none() {
-        return Err(ApiError::bad_request("Active subscription required to create worker profile"));
+        return Err(ApiError::bad_request(
+            "Active subscription required to create worker profile",
+        ));
     }
 
     let subscription = has_subscription.unwrap();
@@ -302,22 +309,26 @@ pub async fn create_worker_profile(
         "gold" => WorkerSubscriptionPlan::Gold,
         _ => WorkerSubscriptionPlan::None,
     };
-    
+
     let location = GeoLocation {
         geo_type: String::from("Point"),
-        coordinates: [dto.longitude.unwrap_or(72.8311), dto.latitude.unwrap_or(21.1702)]
+        coordinates: [
+            dto.longitude.unwrap_or(72.8311),
+            dto.latitude.unwrap_or(21.1702),
+        ],
     };
 
     // Check if worker profile already exists
-    let existing = db.collection::<WorkerProfile>("worker_profiles")
+    let existing = db
+        .collection::<WorkerProfile>("worker_profiles")
         .find_one(doc! { "user_id": auth.user_id }, None)
         .await
         .map_err(|e| ApiError::internal_error(format!("Database error: {}", e)))?;
-    
+
     if existing.is_some() {
         return Err(ApiError::bad_request("Worker profile already exists"));
     }
-    
+
     // Create worker profile
     let worker = WorkerProfile {
         id: None,
@@ -340,8 +351,9 @@ pub async fn create_worker_profile(
         location,
         updated_at: DateTime::now(),
     };
-    
-    let result = db.collection::<WorkerProfile>("worker_profiles")
+
+    let result = db
+        .collection::<WorkerProfile>("worker_profiles")
         .insert_one(&worker, None)
         .await
         .map_err(|e| ApiError::internal_error(format!("Failed to create profile: {}", e)))?;
@@ -354,13 +366,14 @@ pub async fn create_worker_profile(
         "New Worker Registered".to_string(),
         format!("A new worker has registered and is pending verification."),
         Some(worker_id),
-    ).await;
+    )
+    .await;
 
     Ok(Json(ApiResponse::success_with_message(
         "Worker profile created successfully".to_string(),
         serde_json::json!({
             "worker_id": worker_id.to_hex()
-        })
+        }),
     )))
 }
 
@@ -370,15 +383,16 @@ pub async fn get_worker_profile_by_id(
     db: &State<DbConn>,
     worker_id: String,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
-    let object_id = ObjectId::parse_str(&worker_id)
-        .map_err(|_| ApiError::bad_request("Invalid worker ID"))?;
-    
-    let worker = db.collection::<WorkerProfile>("worker_profiles")
+    let object_id =
+        ObjectId::parse_str(&worker_id).map_err(|_| ApiError::bad_request("Invalid worker ID"))?;
+
+    let worker = db
+        .collection::<WorkerProfile>("worker_profiles")
         .find_one(doc! { "_id": object_id }, None)
         .await
         .map_err(|e| ApiError::internal_error(format!("Database error: {}", e)))?
         .ok_or_else(|| ApiError::not_found("Worker profile not found"))?;
-    
+
     Ok(Json(ApiResponse::success(serde_json::json!(worker))))
 }
 
@@ -388,12 +402,13 @@ pub async fn get_worker_profile(
     db: &State<DbConn>,
     auth: AuthGuard,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
-    let worker = db.collection::<WorkerProfile>("worker_profiles")
+    let worker = db
+        .collection::<WorkerProfile>("worker_profiles")
         .find_one(doc! { "user_id": auth.user_id }, None)
         .await
         .map_err(|e| ApiError::internal_error(format!("Database error: {}", e)))?
         .ok_or_else(|| ApiError::not_found("Worker profile not found"))?;
-    
+
     Ok(Json(ApiResponse::success(serde_json::json!(worker))))
 }
 
@@ -407,7 +422,7 @@ pub async fn update_worker_profile(
     let mut update_doc = doc! {
         "updated_at": DateTime::now()
     };
-    
+
     if let Some(ref categories) = dto.categories {
         update_doc.insert("categories", categories);
     }
@@ -429,20 +444,21 @@ pub async fn update_worker_profile(
     if let Some(available) = dto.is_available {
         update_doc.insert("is_available", available);
     }
-    
-    let result = db.collection::<WorkerProfile>("worker_profiles")
+
+    let result = db
+        .collection::<WorkerProfile>("worker_profiles")
         .update_one(
             doc! { "user_id": auth.user_id },
             doc! { "$set": update_doc },
-            None
+            None,
         )
         .await
         .map_err(|e| ApiError::internal_error(format!("Failed to update profile: {}", e)))?;
-    
+
     if result.matched_count == 0 {
         return Err(ApiError::not_found("Worker profile not found"));
     }
-    
+
     Ok(Json(ApiResponse::success(serde_json::json!({
         "message": "Worker profile updated successfully"
     }))))
@@ -457,51 +473,58 @@ pub async fn search_workers(
     let page = query.page.unwrap_or(1).max(1);
     let limit = query.limit.unwrap_or(20).min(100);
     let skip = (page - 1) * limit;
-    
+
     let mut filter = doc! {
         "is_available": true,
         "is_verified": true,
     };
-    
+
     if let Some(category) = query.category {
         filter.insert("categories", category);
     }
-    
+
     if let Some(subcategory) = query.subcategory {
         filter.insert("subcategories", subcategory);
     }
-    
+
     if let Some(min_rating) = query.min_rating {
         filter.insert("rating", doc! { "$gte": min_rating });
     }
-    
+
     let find_options = FindOptions::builder()
         .skip(skip as u64)
         .limit(limit)
-        .sort(doc! { 
+        .sort(doc! {
             "subscription_plan": -1,
             "rating": -1,
             "total_reviews": -1
         })
         .build();
-    
-    let mut cursor = db.collection::<WorkerProfile>("worker_profiles")
+
+    let mut cursor = db
+        .collection::<WorkerProfile>("worker_profiles")
         .find(filter.clone(), find_options)
         .await
         .map_err(|e| ApiError::internal_error(format!("Database error: {}", e)))?;
-    
+
     let mut workers = Vec::new();
-    while cursor.advance().await.map_err(|e| ApiError::internal_error(format!("Cursor error: {}", e)))? {
-        let worker = cursor.deserialize_current()
+    while cursor
+        .advance()
+        .await
+        .map_err(|e| ApiError::internal_error(format!("Cursor error: {}", e)))?
+    {
+        let worker = cursor
+            .deserialize_current()
             .map_err(|e| ApiError::internal_error(format!("Deserialization error: {}", e)))?;
         workers.push(worker);
     }
-    
-    let total = db.collection::<WorkerProfile>("worker_profiles")
+
+    let total = db
+        .collection::<WorkerProfile>("worker_profiles")
         .count_documents(filter, None)
         .await
         .map_err(|e| ApiError::internal_error(format!("Count error: {}", e)))?;
-    
+
     Ok(Json(ApiResponse::success(serde_json::json!({
         "workers": workers,
         "pagination": {
@@ -555,15 +578,13 @@ pub async fn find_nearby_workers(
                     "coordinates": [query.longitude, query.latitude]
                 },
                 "distanceField": "distance",
-                "maxDistance": 10_000,
+                "maxDistance": 50_000,
                 "spherical": true,
                 "key": "location"
             }
         },
-
         // 2️⃣ FILTER EARLY
         doc! { "$match": match_filter.clone() },
-
         // 3️⃣ LOOKUP USER (PIPELINE + PROJECTION = FAST)
         doc! {
             "$lookup": {
@@ -586,10 +607,8 @@ pub async fn find_nearby_workers(
                 "as": "user"
             }
         },
-
         // 4️⃣ FLATTEN USER
         doc! { "$unwind": "$user" },
-
         // 5️⃣ EXPOSE FIELDS FOR FRONTEND
         doc! {
             "$addFields": {
@@ -597,7 +616,6 @@ pub async fn find_nearby_workers(
                 "name": "$user.name"
             }
         },
-
         // 6️⃣ SORT (after filtering, before pagination)
         doc! {
             "$sort": {
@@ -606,17 +624,15 @@ pub async fn find_nearby_workers(
                 "rating": -1
             }
         },
-
         // 7️⃣ PAGINATION
         doc! { "$skip": skip },
         doc! { "$limit": limit },
-
         // 8️⃣ CLEAN RESPONSE
         doc! {
             "$project": {
                 "user": 0
             }
-        }
+        },
     ];
 
     let mut cursor = db
@@ -626,7 +642,11 @@ pub async fn find_nearby_workers(
         .map_err(|e| ApiError::internal_error(format!("Aggregation error: {}", e)))?;
 
     let mut workers = Vec::new();
-    while cursor.advance().await.map_err(|e| ApiError::internal_error(e.to_string()))? {
+    while cursor
+        .advance()
+        .await
+        .map_err(|e| ApiError::internal_error(e.to_string()))?
+    {
         workers.push(
             cursor
                 .deserialize_current()
@@ -643,13 +663,13 @@ pub async fn find_nearby_workers(
                     "coordinates": [query.longitude, query.latitude]
                 },
                 "distanceField": "distance",
-                "maxDistance": 10_000,
+                "maxDistance": 50_000,
                 "spherical": true,
                 "key": "location"
             }
         },
         doc! { "$match": match_filter },
-        doc! { "$count": "total" }
+        doc! { "$count": "total" },
     ];
 
     let mut count_cursor = db
@@ -718,5 +738,5 @@ pub async fn update_worker_location(
 
     Ok(Json(ApiResponse::success(serde_json::json!({
         "message": "Location updated successfully"
-    })))) 
+    }))))
 }
