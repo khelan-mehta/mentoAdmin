@@ -74,9 +74,9 @@ const planPricing: Record<string, number> = {
   free: 0,
   basic: 99,
   silver: 99,
-  premium: 199,
-  gold: 299,
-  enterprise: 499,
+  premium: 499,
+  gold: 799,
+  enterprise: 799,
 };
 
 // GST Configuration
@@ -340,7 +340,7 @@ const InvoiceExportModal = ({
   const [exportType, setExportType] = useState<"all" | "paid" | "filtered">(
     "paid",
   );
-  const [gstType, setGstType] = useState<"intra" | "inter">("intra");
+  const [gstType, setGstType] = useState<"auto" | "intra" | "inter">("auto");
 
   const [userTypeFilter, setUserTypeFilter] = useState<
     "all" | "worker" | "job_seeker"
@@ -433,7 +433,6 @@ const InvoiceExportModal = ({
         return;
       }
 
-      const isInterState = gstType === "inter";
       const invoiceDate = new Date();
 
       // Create invoice data with GST-inclusive calculation (full precision, no rounding)
@@ -442,11 +441,18 @@ const InvoiceExportModal = ({
         const planPrice = planPricing[plan] || 0;
         const userId = sub.user_id?.$oid || sub.user_id || sub.id || "";
 
-        // Determine inter/intra state from user's KYC state
+        // Determine inter/intra state per subscription based on customer's state
         const userState = (sub.kyc_state || "").toLowerCase();
         const companyState = COMPANY_INFO.state.toLowerCase();
-        const isUserInterState = userState && userState !== companyState;
-        const useInterState = isInterState || isUserInterState;
+        let useInterState: boolean;
+        if (gstType === "auto") {
+          // Auto-detect: if user has KYC state, compare with company state (Gujarat)
+          // Gujarat customers → intra-state (CGST+SGST), others → inter-state (IGST)
+          useInterState = userState ? userState !== companyState : false;
+        } else {
+          // Manual override: force intra or inter for all
+          useInterState = gstType === "inter";
+        }
 
         // Full-precision GST calculation (plan price is inclusive of GST)
         const base = planPrice > 0 ? planPrice / (1 + GST_RATE / 100) : 0;
@@ -509,7 +515,11 @@ const InvoiceExportModal = ({
         ["Report Generated On", invoiceDate.toLocaleString()],
         [
           "GST Type",
-          isInterState ? "Inter-State (IGST)" : "Intra-State (CGST + SGST)",
+          gstType === "auto"
+            ? "Auto (Per customer state - Gujarat: CGST+SGST, Others: IGST)"
+            : gstType === "inter"
+              ? "Inter-State (IGST)"
+              : "Intra-State (CGST + SGST)",
         ],
         ["Total Invoices", filtered.length],
         [""],
@@ -963,50 +973,35 @@ const InvoiceExportModal = ({
                   GST Calculation Type
                 </label>
                 <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                  <button
-                    onClick={() => setGstType("intra")}
-                    style={{
-                      padding: "10px 16px",
-                      borderRadius: "8px",
-                      border: `2px solid ${gstType === "intra" ? theme.colors.primary : theme.colors.border}`,
-                      background:
-                        gstType === "intra"
-                          ? `${theme.colors.primary}10`
-                          : "transparent",
-                      color:
-                        gstType === "intra"
-                          ? theme.colors.primary
-                          : theme.colors.text,
-                      fontSize: "14px",
-                      fontWeight: "500",
-                      cursor: "pointer",
-                      transition: "all 0.2s",
-                    }}
-                  >
-                    Intra-State (CGST + SGST)
-                  </button>
-                  <button
-                    onClick={() => setGstType("inter")}
-                    style={{
-                      padding: "10px 16px",
-                      borderRadius: "8px",
-                      border: `2px solid ${gstType === "inter" ? theme.colors.primary : theme.colors.border}`,
-                      background:
-                        gstType === "inter"
-                          ? `${theme.colors.primary}10`
-                          : "transparent",
-                      color:
-                        gstType === "inter"
-                          ? theme.colors.primary
-                          : theme.colors.text,
-                      fontSize: "14px",
-                      fontWeight: "500",
-                      cursor: "pointer",
-                      transition: "all 0.2s",
-                    }}
-                  >
-                    Inter-State (IGST)
-                  </button>
+                  {[
+                    { key: "auto", label: "Auto (By Customer State)" },
+                    { key: "intra", label: "Intra-State (CGST + SGST)" },
+                    { key: "inter", label: "Inter-State (IGST)" },
+                  ].map((option) => (
+                    <button
+                      key={option.key}
+                      onClick={() => setGstType(option.key as any)}
+                      style={{
+                        padding: "10px 16px",
+                        borderRadius: "8px",
+                        border: `2px solid ${gstType === option.key ? theme.colors.primary : theme.colors.border}`,
+                        background:
+                          gstType === option.key
+                            ? `${theme.colors.primary}10`
+                            : "transparent",
+                        color:
+                          gstType === option.key
+                            ? theme.colors.primary
+                            : theme.colors.text,
+                        fontSize: "14px",
+                        fontWeight: "500",
+                        cursor: "pointer",
+                        transition: "all 0.2s",
+                      }}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
                 </div>
                 <p
                   style={{
@@ -1015,9 +1010,11 @@ const InvoiceExportModal = ({
                     color: theme.colors.textSecondary,
                   }}
                 >
-                  {gstType === "intra"
-                    ? `CGST @ ${CGST_RATE}% + SGST @ ${SGST_RATE}% = ${GST_RATE}% Total`
-                    : `IGST @ ${IGST_RATE}%`}
+                  {gstType === "auto"
+                    ? "Gujarat customers: CGST + SGST (intra-state), Others: IGST (inter-state)"
+                    : gstType === "intra"
+                      ? `CGST @ ${CGST_RATE}% + SGST @ ${SGST_RATE}% = ${GST_RATE}% Total`
+                      : `IGST @ ${IGST_RATE}%`}
                 </p>
               </div>
 
@@ -1343,14 +1340,18 @@ const SubscriptionDetailModal = ({ subscription, onClose }: any) => {
         "N/A";
       const customerAddress = kycData?.address || "";
       const customerCity = kycData?.city || subscription.user_city || "";
-      const customerState = kycData?.state || COMPANY_INFO.state;
+      const customerState =
+        kycData?.state || subscription.kyc_state || "";
       const customerPincode =
-        kycData?.pincode || subscription.user_pincode || "";
-      const customerDistrict = kycData?.city || subscription.user_city || "";
+        kycData?.pincode || subscription.kyc_pincode || subscription.user_pincode || "";
+      const customerDistrict = kycData?.city || subscription.kyc_city || subscription.user_city || "";
 
-      // Determine inter/intra state GST
-      const isInterState =
-        customerState.toLowerCase() !== COMPANY_INFO.state.toLowerCase();
+      // Determine inter/intra state GST based on customer's state
+      // Gujarat customers → intra-state (CGST+SGST), others → inter-state (IGST)
+      // If state is unknown, default to intra-state (Gujarat)
+      const isInterState = customerState
+        ? customerState.toLowerCase() !== COMPANY_INFO.state.toLowerCase()
+        : false;
 
       // GST-inclusive calculation
       const planPrice = planPricing[plan] || 0;
@@ -1493,15 +1494,16 @@ const SubscriptionDetailModal = ({ subscription, onClose }: any) => {
       // ===== STATE / STATE CODE / GSTIN ROW =====
       const stateRowH = 14;
       doc.rect(LM, y, TW, stateRowH);
+      const displayState = customerState || COMPANY_INFO.state;
       doc.setFont("helvetica", "bold");
       doc.text("State:", LM + 2, y + 5);
       doc.setFont("helvetica", "normal");
-      doc.text(customerState, LM + 18, y + 5);
+      doc.text(displayState, LM + 18, y + 5);
       doc.setFont("helvetica", "bold");
       doc.text("State Code", LM + 58, y + 5);
       doc.setFont("helvetica", "normal");
       doc.text(
-        customerState.toLowerCase() === "gujarat" ? "24" : "",
+        displayState.toLowerCase() === "gujarat" ? "24" : "",
         LM + 82,
         y + 5,
       );
