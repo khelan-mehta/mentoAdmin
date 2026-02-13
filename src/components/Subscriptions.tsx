@@ -73,7 +73,7 @@ const planConfig: Record<string, { color: string; bg: string; icon: any }> = {
 const planPricing: Record<string, number> = {
   free: 0,
   basic: 99,
-  silver: 99,
+  silver: 499,
   premium: 499,
   gold: 799,
   enterprise: 799,
