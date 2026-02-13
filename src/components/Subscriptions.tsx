@@ -71,12 +71,10 @@ const planConfig: Record<string, { color: string; bg: string; icon: any }> = {
 
 // Plan pricing configuration (in INR) - these are INCLUSIVE of GST
 const planPricing: Record<string, number> = {
-  free: 0,
   basic: 99,
   silver: 499,
-  premium: 499,
+
   gold: 799,
-  enterprise: 799,
 };
 
 // GST Configuration
@@ -102,7 +100,13 @@ const COMPANY_INFO = {
 const isGujaratState = (state: string): boolean => {
   if (!state) return false;
   const s = state.trim().toLowerCase();
-  return s === "gujarat" || s === "gujrat" || s === "gujrath" || s === "24" || s === "gj";
+  return (
+    s === "gujarat" ||
+    s === "gujrat" ||
+    s === "gujrath" ||
+    s === "24" ||
+    s === "gj"
+  );
 };
 
 // Check if a pincode belongs to Gujarat (360xxx - 396xxx)
@@ -512,7 +516,9 @@ const InvoiceExportModal = ({
         const totalGstAmt = cgstAmt + sgstAmt + igstAmt;
 
         return {
-          invoiceNumber: getInvoiceNumber(subId) || `MENTO/${invoiceDate.getFullYear()}${String(invoiceDate.getMonth() + 1).padStart(2, "0")}/00000`,
+          invoiceNumber:
+            getInvoiceNumber(subId) ||
+            `MENTO/${invoiceDate.getFullYear()}${String(invoiceDate.getMonth() + 1).padStart(2, "0")}/00000`,
           invoiceDate: invoiceDate.toISOString().split("T")[0],
           customerName: sub.full_name || sub.name || "N/A",
           customerEmail: sub.user_email || "N/A",
@@ -1135,12 +1141,11 @@ const InvoiceExportModal = ({
                   }}
                 >
                   <option value="all">All Plans</option>
-                  <option value="free">Free</option>
+
                   <option value="basic">Basic</option>
                   <option value="silver">Silver</option>
-                  <option value="premium">Premium</option>
+
                   <option value="gold">Gold</option>
-                  <option value="enterprise">Enterprise</option>
                 </select>
               </div>
 
@@ -1390,16 +1395,26 @@ const SubscriptionDetailModal = ({ subscription, onClose }: any) => {
         "N/A";
       const customerAddress = kycData?.address || "";
       const customerCity = kycData?.city || subscription.user_city || "";
-      const customerState =
-        (kycData?.state || subscription.kyc_state || "").trim();
+      const customerState = (
+        kycData?.state ||
+        subscription.kyc_state ||
+        ""
+      ).trim();
       const customerPincode =
-        kycData?.pincode || subscription.kyc_pincode || subscription.user_pincode || "";
-      const customerDistrict = kycData?.city || subscription.kyc_city || subscription.user_city || "";
+        kycData?.pincode ||
+        subscription.kyc_pincode ||
+        subscription.user_pincode ||
+        "";
+      const customerDistrict =
+        kycData?.city || subscription.kyc_city || subscription.user_city || "";
 
       // Determine inter/intra state GST based on customer's state + pincode
       // Gujarat customers → intra-state (CGST+SGST), others → inter-state (IGST)
       // If state is unknown, fall back to pincode (Gujarat: 36xxxx-39xxxx)
-      const isInterState = !isCustomerFromGujarat(customerState, customerPincode);
+      const isInterState = !isCustomerFromGujarat(
+        customerState,
+        customerPincode,
+      );
 
       // GST-inclusive calculation
       const planPrice = planPricing[plan] || 0;
@@ -1407,7 +1422,9 @@ const SubscriptionDetailModal = ({ subscription, onClose }: any) => {
 
       // Get persistent invoice number (keyed by subscription ID, not user ID)
       const subId = subscription.id || subscription._id?.$oid || "";
-      const invoiceNumber = getInvoiceNumber(subId) || `MENTO/${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, "0")}/00000`;
+      const invoiceNumber =
+        getInvoiceNumber(subId) ||
+        `MENTO/${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, "0")}/00000`;
       const invoiceDate = new Date();
       const invoiceDateStr = `${String(invoiceDate.getDate()).padStart(2, "0")}-${String(invoiceDate.getMonth() + 1).padStart(2, "0")}-${invoiceDate.getFullYear()}`;
 
@@ -1551,11 +1568,7 @@ const SubscriptionDetailModal = ({ subscription, onClose }: any) => {
       doc.setFont("helvetica", "bold");
       doc.text("State Code", LM + 58, y + 5);
       doc.setFont("helvetica", "normal");
-      doc.text(
-        !isInterState ? "24" : "",
-        LM + 82,
-        y + 5,
-      );
+      doc.text(!isInterState ? "24" : "", LM + 82, y + 5);
       doc.setFont("helvetica", "bold");
       doc.text("GSTIN:", LM + 2, y + 11);
       y += stateRowH;
@@ -1629,16 +1642,36 @@ const SubscriptionDetailModal = ({ subscription, onClose }: any) => {
       // ===== AMOUNT IN WORDS + GST SUMMARY =====
       // Build tax rows: only include CGST/SGST for intra-state (Gujarat),
       // only include IGST for inter-state (non-Gujarat). Skip rows with 0 value.
-      const taxRows: Array<{ label: string; rate: string; amount: string }> = [];
+      const taxRows: Array<{ label: string; rate: string; amount: string }> =
+        [];
       if (!isInterState) {
         // Gujarat (intra-state): SGST + CGST only
-        if (gst.sgst > 0) taxRows.push({ label: "SGST", rate: `${SGST_RATE}.00%`, amount: gst.sgst.toFixed(2) });
-        if (gst.cgst > 0) taxRows.push({ label: "CGST", rate: `${CGST_RATE}.00%`, amount: gst.cgst.toFixed(2) });
+        if (gst.sgst > 0)
+          taxRows.push({
+            label: "SGST",
+            rate: `${SGST_RATE}.00%`,
+            amount: gst.sgst.toFixed(2),
+          });
+        if (gst.cgst > 0)
+          taxRows.push({
+            label: "CGST",
+            rate: `${CGST_RATE}.00%`,
+            amount: gst.cgst.toFixed(2),
+          });
       } else {
         // Non-Gujarat (inter-state): IGST only
-        if (gst.igst > 0) taxRows.push({ label: "IGST", rate: `${IGST_RATE}%`, amount: gst.igst.toFixed(2) });
+        if (gst.igst > 0)
+          taxRows.push({
+            label: "IGST",
+            rate: `${IGST_RATE}%`,
+            amount: gst.igst.toFixed(2),
+          });
       }
-      taxRows.push({ label: "Round Off", rate: "", amount: gst.roundOff.toFixed(2) });
+      taxRows.push({
+        label: "Round Off",
+        rate: "",
+        amount: gst.roundOff.toFixed(2),
+      });
       // +1 for Net Amount row at the end
       const gstSummaryH = 6 + (taxRows.length + 1) * 8 + 2;
 
@@ -2446,7 +2479,7 @@ const CreateSubscriptionModal = ({
           headers: {
             Authorization: `Bearer ${localStorage.getItem("accessToken") || localStorage.getItem("token") || ""}`,
           },
-        }
+        },
       );
       if (response.ok) {
         const data = await response.json();
@@ -2581,7 +2614,8 @@ const CreateSubscriptionModal = ({
                       color: theme.colors.textSecondary,
                     }}
                   >
-                    {selectedUser.mobile} {selectedUser.email ? `| ${selectedUser.email}` : ""}
+                    {selectedUser.mobile}{" "}
+                    {selectedUser.email ? `| ${selectedUser.email}` : ""}
                   </div>
                 </div>
                 <button
@@ -3300,7 +3334,8 @@ export const Subscriptions = () => {
 
   const handleDeleteSubscription = async () => {
     if (!deleteSubTarget) return;
-    const subId = deleteSubTarget._id?.$oid || deleteSubTarget._id || deleteSubTarget.id;
+    const subId =
+      deleteSubTarget._id?.$oid || deleteSubTarget._id || deleteSubTarget.id;
     if (!subId) return;
 
     try {
@@ -3312,7 +3347,7 @@ export const Subscriptions = () => {
           headers: {
             Authorization: `Bearer ${localStorage.getItem("accessToken") || localStorage.getItem("token") || ""}`,
           },
-        }
+        },
       );
 
       if (response.ok) {
@@ -3573,11 +3608,11 @@ export const Subscriptions = () => {
               }}
             >
               <option value="all">All Plans</option>
-              <option value="free">Free</option>
+
               <option value="basic">Basic</option>
-              <option value="premium">Premium</option>
+
+              <option value="silver">Silver</option>
               <option value="gold">Gold</option>
-              <option value="enterprise">Enterprise</option>
             </select>
 
             {/* Search */}
