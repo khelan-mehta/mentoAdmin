@@ -98,6 +98,13 @@ const COMPANY_INFO = {
   gstin: "24GNCPR9725J1ZG",
 };
 
+// Check if a state value represents Gujarat (handles common variations/typos)
+const isGujaratState = (state: string): boolean => {
+  if (!state) return false;
+  const s = state.trim().toLowerCase();
+  return s === "gujarat" || s === "gujrat" || s === "gujrath" || s === "24" || s === "gj";
+};
+
 // Bank details for invoice
 const BANK_DETAILS = {
   bank: "BANK OF BARODA",
@@ -442,13 +449,11 @@ const InvoiceExportModal = ({
         const userId = sub.user_id?.$oid || sub.user_id || sub.id || "";
 
         // Determine inter/intra state per subscription based on customer's state
-        const userState = (sub.kyc_state || "").toLowerCase();
-        const companyState = COMPANY_INFO.state.toLowerCase();
+        const userState = (sub.kyc_state || "").trim();
         let useInterState: boolean;
         if (gstType === "auto") {
-          // Auto-detect: if user has KYC state, compare with company state (Gujarat)
-          // Gujarat customers → intra-state (CGST+SGST), others → inter-state (IGST)
-          useInterState = userState ? userState !== companyState : false;
+          // Auto-detect: Gujarat customers → intra-state (CGST+SGST), others → inter-state (IGST)
+          useInterState = userState ? !isGujaratState(userState) : false;
         } else {
           // Manual override: force intra or inter for all
           useInterState = gstType === "inter";
@@ -1341,7 +1346,7 @@ const SubscriptionDetailModal = ({ subscription, onClose }: any) => {
       const customerAddress = kycData?.address || "";
       const customerCity = kycData?.city || subscription.user_city || "";
       const customerState =
-        kycData?.state || subscription.kyc_state || "";
+        (kycData?.state || subscription.kyc_state || "").trim();
       const customerPincode =
         kycData?.pincode || subscription.kyc_pincode || subscription.user_pincode || "";
       const customerDistrict = kycData?.city || subscription.kyc_city || subscription.user_city || "";
@@ -1350,7 +1355,7 @@ const SubscriptionDetailModal = ({ subscription, onClose }: any) => {
       // Gujarat customers → intra-state (CGST+SGST), others → inter-state (IGST)
       // If state is unknown, default to intra-state (Gujarat)
       const isInterState = customerState
-        ? customerState.toLowerCase() !== COMPANY_INFO.state.toLowerCase()
+        ? !isGujaratState(customerState)
         : false;
 
       // GST-inclusive calculation
@@ -1503,7 +1508,7 @@ const SubscriptionDetailModal = ({ subscription, onClose }: any) => {
       doc.text("State Code", LM + 58, y + 5);
       doc.setFont("helvetica", "normal");
       doc.text(
-        displayState.toLowerCase() === "gujarat" ? "24" : "",
+        isGujaratState(displayState) ? "24" : "",
         LM + 82,
         y + 5,
       );
