@@ -128,36 +128,64 @@ const BANK_DETAILS = {
   ifsc: "BARB0SATLAS",
 };
 
-// Invoice number tracking using localStorage
+// Invoice number tracking using localStorage, keyed by subscription ID
 const INVOICE_STORAGE_KEY = "mento_invoice_data";
 
 interface InvoiceTrackingData {
   counter: number;
-  userInvoices: Record<string, string>;
+  subscriptionInvoices: Record<string, string>;
 }
 
 const getInvoiceTrackingData = (): InvoiceTrackingData => {
   try {
     const data = localStorage.getItem(INVOICE_STORAGE_KEY);
-    if (data) return JSON.parse(data);
+    if (data) {
+      const parsed = JSON.parse(data);
+      // Migration: handle old format that used userInvoices key
+      if (parsed.userInvoices && !parsed.subscriptionInvoices) {
+        return {
+          counter: parsed.counter || 0,
+          subscriptionInvoices: parsed.userInvoices,
+        };
+      }
+      return {
+        counter: parsed.counter || 0,
+        subscriptionInvoices: parsed.subscriptionInvoices || {},
+      };
+    }
   } catch {}
-  return { counter: 0, userInvoices: {} };
+  return { counter: 0, subscriptionInvoices: {} };
 };
 
-const getOrCreateInvoiceNumber = (userId: string): string => {
+// Assign sequential invoice numbers to all subscriptions in display order.
+// Only assigns new numbers; existing assignments are never changed.
+const assignInvoiceNumbers = (subscriptions: any[]): void => {
   const data = getInvoiceTrackingData();
-  if (data.userInvoices[userId]) {
-    return data.userInvoices[userId];
+  let changed = false;
+
+  for (const sub of subscriptions) {
+    const subId = sub.id || sub._id?.$oid || "";
+    if (!subId) continue;
+    if (data.subscriptionInvoices[subId]) continue;
+
+    data.counter++;
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const sequence = String(data.counter).padStart(5, "0");
+    data.subscriptionInvoices[subId] = `MENTO/${year}${month}/${sequence}`;
+    changed = true;
   }
-  data.counter++;
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const sequence = String(data.counter).padStart(5, "0");
-  const invoiceNumber = `MENTO/${year}${month}/${sequence}`;
-  data.userInvoices[userId] = invoiceNumber;
-  localStorage.setItem(INVOICE_STORAGE_KEY, JSON.stringify(data));
-  return invoiceNumber;
+
+  if (changed) {
+    localStorage.setItem(INVOICE_STORAGE_KEY, JSON.stringify(data));
+  }
+};
+
+// Get the invoice number for a subscription (must be pre-assigned via assignInvoiceNumbers)
+const getInvoiceNumber = (subscriptionId: string): string => {
+  const data = getInvoiceTrackingData();
+  return data.subscriptionInvoices[subscriptionId] || "";
 };
 
 // Calculate GST (plan price is INCLUSIVE of GST - base is derived)
@@ -461,7 +489,7 @@ const InvoiceExportModal = ({
       const invoiceData: InvoiceItem[] = filtered.map((sub) => {
         const plan = (sub.subscription_plan || "free").toLowerCase();
         const planPrice = planPricing[plan] || 0;
-        const userId = sub.user_id?.$oid || sub.user_id || sub.id || "";
+        const subId = sub.id || sub._id?.$oid || "";
 
         // Determine inter/intra state per subscription using state + pincode
         const userState = (sub.kyc_state || "").trim();
@@ -484,7 +512,7 @@ const InvoiceExportModal = ({
         const totalGstAmt = cgstAmt + sgstAmt + igstAmt;
 
         return {
-          invoiceNumber: getOrCreateInvoiceNumber(userId),
+          invoiceNumber: getInvoiceNumber(subId) || `MENTO/${invoiceDate.getFullYear()}${String(invoiceDate.getMonth() + 1).padStart(2, "0")}/00000`,
           invoiceDate: invoiceDate.toISOString().split("T")[0],
           customerName: sub.full_name || sub.name || "N/A",
           customerEmail: sub.user_email || "N/A",
@@ -1377,8 +1405,9 @@ const SubscriptionDetailModal = ({ subscription, onClose }: any) => {
       const planPrice = planPricing[plan] || 0;
       const gst = calculateGSTInclusive(planPrice, isInterState);
 
-      // Get or create persistent invoice number
-      const invoiceNumber = getOrCreateInvoiceNumber(userId);
+      // Get persistent invoice number (keyed by subscription ID, not user ID)
+      const subId = subscription.id || subscription._id?.$oid || "";
+      const invoiceNumber = getInvoiceNumber(subId) || `MENTO/${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, "0")}/00000`;
       const invoiceDate = new Date();
       const invoiceDateStr = `${String(invoiceDate.getDate()).padStart(2, "0")}-${String(invoiceDate.getMonth() + 1).padStart(2, "0")}-${invoiceDate.getFullYear()}`;
 
@@ -1598,7 +1627,21 @@ const SubscriptionDetailModal = ({ subscription, onClose }: any) => {
       y = subTotalY + 7;
 
       // ===== AMOUNT IN WORDS + GST SUMMARY =====
-      const gstSummaryH = 40;
+      // Build tax rows: only include CGST/SGST for intra-state (Gujarat),
+      // only include IGST for inter-state (non-Gujarat). Skip rows with 0 value.
+      const taxRows: Array<{ label: string; rate: string; amount: string }> = [];
+      if (!isInterState) {
+        // Gujarat (intra-state): SGST + CGST only
+        if (gst.sgst > 0) taxRows.push({ label: "SGST", rate: `${SGST_RATE}.00%`, amount: gst.sgst.toFixed(2) });
+        if (gst.cgst > 0) taxRows.push({ label: "CGST", rate: `${CGST_RATE}.00%`, amount: gst.cgst.toFixed(2) });
+      } else {
+        // Non-Gujarat (inter-state): IGST only
+        if (gst.igst > 0) taxRows.push({ label: "IGST", rate: `${IGST_RATE}%`, amount: gst.igst.toFixed(2) });
+      }
+      taxRows.push({ label: "Round Off", rate: "", amount: gst.roundOff.toFixed(2) });
+      // +1 for Net Amount row at the end
+      const gstSummaryH = 6 + (taxRows.length + 1) * 8 + 2;
+
       doc.rect(LM, y, TW, gstSummaryH);
       const gstDivX = LM + 110;
       doc.line(gstDivX, y, gstDivX, y + gstSummaryH);
@@ -1610,41 +1653,20 @@ const SubscriptionDetailModal = ({ subscription, onClose }: any) => {
       doc.setFont("helvetica", "normal");
       doc.text(numberToWords(Math.round(gst.total)), LM + 35, y + 6);
 
-      // Right side: GST breakdown
+      // Right side: GST breakdown (only non-zero tax rows)
       let gstY = y + 6;
       const gstLabelX = gstDivX + 2;
       const gstPctX = gstDivX + 28;
       const gstAmtX = RM - 2;
 
       doc.setFont("helvetica", "bold");
-      doc.text("SGST", gstLabelX, gstY);
-      doc.text(`${SGST_RATE}.00%`, gstPctX, gstY);
-      doc.text(isInterState ? "" : gst.sgst.toFixed(2), gstAmtX, gstY, {
-        align: "right",
-      });
-      doc.line(gstDivX, gstY + 2, RM, gstY + 2);
-      gstY += 8;
-
-      doc.text("CGST", gstLabelX, gstY);
-      doc.text(`${CGST_RATE}.00%`, gstPctX, gstY);
-      doc.text(isInterState ? "" : gst.cgst.toFixed(2), gstAmtX, gstY, {
-        align: "right",
-      });
-      doc.line(gstDivX, gstY + 2, RM, gstY + 2);
-      gstY += 8;
-
-      doc.text("IGST", gstLabelX, gstY);
-      doc.text(`${IGST_RATE}%`, gstPctX, gstY);
-      doc.text(isInterState ? gst.igst.toFixed(2) : "", gstAmtX, gstY, {
-        align: "right",
-      });
-      doc.line(gstDivX, gstY + 2, RM, gstY + 2);
-      gstY += 8;
-
-      doc.text("Round Off", gstLabelX, gstY);
-      doc.text(gst.roundOff.toFixed(2), gstAmtX, gstY, { align: "right" });
-      doc.line(gstDivX, gstY + 2, RM, gstY + 2);
-      gstY += 8;
+      for (const row of taxRows) {
+        doc.text(row.label, gstLabelX, gstY);
+        if (row.rate) doc.text(row.rate, gstPctX, gstY);
+        doc.text(row.amount, gstAmtX, gstY, { align: "right" });
+        doc.line(gstDivX, gstY + 2, RM, gstY + 2);
+        gstY += 8;
+      }
 
       doc.setFont("helvetica", "bold");
       doc.text("Net Amount", gstLabelX, gstY);
@@ -3220,6 +3242,9 @@ export const Subscriptions = () => {
       }
 
       setSubscriptions(allSubscriptions);
+
+      // Pre-assign sequential invoice numbers in display order
+      assignInvoiceNumbers(allSubscriptions);
 
       // Calculate stats
       const newStats = {
