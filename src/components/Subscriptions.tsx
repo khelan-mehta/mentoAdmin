@@ -105,6 +105,21 @@ const isGujaratState = (state: string): boolean => {
   return s === "gujarat" || s === "gujrat" || s === "gujrath" || s === "24" || s === "gj";
 };
 
+// Check if a pincode belongs to Gujarat (360xxx - 396xxx)
+const isGujaratPincode = (pincode: string): boolean => {
+  if (!pincode) return false;
+  const p = pincode.trim().replace(/\s/g, "");
+  if (p.length !== 6 || !/^\d{6}$/.test(p)) return false;
+  const prefix = parseInt(p.substring(0, 2), 10);
+  return prefix >= 36 && prefix <= 39;
+};
+
+// Determine if a customer is from Gujarat using state and pincode
+const isCustomerFromGujarat = (state: string, pincode: string): boolean => {
+  if (state && state.trim()) return isGujaratState(state);
+  return isGujaratPincode(pincode);
+};
+
 // Bank details for invoice
 const BANK_DETAILS = {
   bank: "BANK OF BARODA",
@@ -448,12 +463,14 @@ const InvoiceExportModal = ({
         const planPrice = planPricing[plan] || 0;
         const userId = sub.user_id?.$oid || sub.user_id || sub.id || "";
 
-        // Determine inter/intra state per subscription based on customer's state
+        // Determine inter/intra state per subscription using state + pincode
         const userState = (sub.kyc_state || "").trim();
+        const userPincode = (sub.kyc_pincode || sub.user_pincode || "").trim();
         let useInterState: boolean;
         if (gstType === "auto") {
           // Auto-detect: Gujarat customers → intra-state (CGST+SGST), others → inter-state (IGST)
-          useInterState = userState ? !isGujaratState(userState) : false;
+          // Falls back to pincode (Gujarat: 36xxxx-39xxxx) if state is missing
+          useInterState = !isCustomerFromGujarat(userState, userPincode);
         } else {
           // Manual override: force intra or inter for all
           useInterState = gstType === "inter";
@@ -1016,7 +1033,7 @@ const InvoiceExportModal = ({
                   }}
                 >
                   {gstType === "auto"
-                    ? "Gujarat customers: CGST + SGST (intra-state), Others: IGST (inter-state)"
+                    ? "Gujarat (by state or pincode 36xxxx-39xxxx): CGST + SGST, Others: IGST"
                     : gstType === "intra"
                       ? `CGST @ ${CGST_RATE}% + SGST @ ${SGST_RATE}% = ${GST_RATE}% Total`
                       : `IGST @ ${IGST_RATE}%`}
@@ -1351,12 +1368,10 @@ const SubscriptionDetailModal = ({ subscription, onClose }: any) => {
         kycData?.pincode || subscription.kyc_pincode || subscription.user_pincode || "";
       const customerDistrict = kycData?.city || subscription.kyc_city || subscription.user_city || "";
 
-      // Determine inter/intra state GST based on customer's state
+      // Determine inter/intra state GST based on customer's state + pincode
       // Gujarat customers → intra-state (CGST+SGST), others → inter-state (IGST)
-      // If state is unknown, default to intra-state (Gujarat)
-      const isInterState = customerState
-        ? !isGujaratState(customerState)
-        : false;
+      // If state is unknown, fall back to pincode (Gujarat: 36xxxx-39xxxx)
+      const isInterState = !isCustomerFromGujarat(customerState, customerPincode);
 
       // GST-inclusive calculation
       const planPrice = planPricing[plan] || 0;
@@ -1508,7 +1523,7 @@ const SubscriptionDetailModal = ({ subscription, onClose }: any) => {
       doc.text("State Code", LM + 58, y + 5);
       doc.setFont("helvetica", "normal");
       doc.text(
-        isGujaratState(displayState) ? "24" : "",
+        !isInterState ? "24" : "",
         LM + 82,
         y + 5,
       );
