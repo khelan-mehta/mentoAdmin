@@ -1,21 +1,26 @@
-use rocket::serde::json::Json;
+use crate::db::DbConn;
+use crate::guards::{AuthGuard, KycGuard};
+use crate::models::{
+    CreateJobSeekerProfileDto, JobSeekerProfile, JobSeekerSubscriptionPlan, Subscription,
+    SubscriptionStatus, SubscriptionType, UpdateJobSeekerProfileDto,
+};
+use crate::models::{JobPost, JobPostResponse};
+use crate::routes::file_upload::{
+    extension_from_content_type, get_extension_from_filename, is_valid_document_extension,
+};
+use crate::services::RazorpayService;
+use crate::utils::{ApiError, ApiResponse};
+use hmac::{Hmac, Mac};
+use mongodb::bson::oid::ObjectId;
+use mongodb::bson::{DateTime, doc};
+use mongodb::options::FindOptions;
 use rocket::State;
 use rocket::form::FromForm;
-use rocket_okapi::openapi;
-use mongodb::bson::{doc, DateTime};
-use mongodb::options::FindOptions;
-use crate::db::DbConn;
-use crate::models::{Subscription, JobSeekerSubscriptionPlan, SubscriptionType, SubscriptionStatus, JobSeekerProfile, CreateJobSeekerProfileDto, UpdateJobSeekerProfileDto};
-use crate::guards::{AuthGuard, KycGuard};
-use crate::utils::{ApiResponse, ApiError};
-use crate::services::RazorpayService;
 use rocket::fs::TempFile;
-use crate::models::{JobPost, JobPostResponse};
-use uuid::Uuid;
-use crate::routes::file_upload::{get_extension_from_filename, extension_from_content_type, is_valid_document_extension};
-use hmac::{Hmac, Mac};
+use rocket::serde::json::Json;
+use rocket_okapi::openapi;
 use sha2::Sha256;
-use mongodb::bson::oid::ObjectId;
+use uuid::Uuid;
 
 // ============================================================================
 // JOB SEEKER SUBSCRIPTION ENDPOINTS
@@ -30,9 +35,13 @@ pub async fn create_job_seeker_subscription(
 ) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
     // Validate plan and get price
     let (price, plan_type) = match plan_name.to_lowercase().as_str() {
-        "basic" => (1.0, JobSeekerSubscriptionPlan::Basic),
+        "basic" => (99.0, JobSeekerSubscriptionPlan::Basic),
         "premium" => (1.5, JobSeekerSubscriptionPlan::Premium),
-        _ => return Err(ApiError::bad_request("Invalid plan. Choose 'basic' or 'premium'")),
+        _ => {
+            return Err(ApiError::bad_request(
+                "Invalid plan. Choose 'basic' or 'premium'",
+            ));
+        }
     };
 
     let now = DateTime::now();
@@ -55,7 +64,9 @@ pub async fn create_job_seeker_subscription(
         .map_err(|e| ApiError::internal_error(e.to_string()))?;
 
     if existing.is_some() {
-        return Err(ApiError::bad_request("You already have an active job seeker subscription"));
+        return Err(ApiError::bad_request(
+            "You already have an active job seeker subscription",
+        ));
     }
 
     // Create Razorpay order
@@ -65,7 +76,10 @@ pub async fn create_job_seeker_subscription(
 
     // Debug: log the full order response and extract order id if present
     println!("Razorpay order created: {:?}", order);
-    let order_id_opt = order.get("id").and_then(|v| v.as_str()).map(|s| s.to_string());
+    let order_id_opt = order
+        .get("id")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
     println!("Razorpay order id: {:?}", order_id_opt);
 
     // Create subscription with cancelled status (pending payment)
@@ -98,7 +112,10 @@ pub async fn create_job_seeker_subscription(
 
     // Debug: log subscription id and order id being returned
     println!("Inserted subscription id: {}", subscription_id);
-    println!("Returning create subscription response for subscription_id={} order_id={:?}", subscription_id, order_id_opt);
+    println!(
+        "Returning create subscription response for subscription_id={} order_id={:?}",
+        subscription_id, order_id_opt
+    );
 
     Ok(Json(ApiResponse::success(serde_json::json!({
         "subscription_id": subscription_id,
@@ -124,7 +141,10 @@ pub async fn verify_job_seeker_payment(
     dto: Json<VerifyJobSeekerPaymentDto>,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
     // Debug: log incoming verification payload
-    println!("Verifying payment: subscription_id={}, order_id={}, payment_id={}, signature={}", dto.subscription_id, dto.razorpay_order_id, dto.razorpay_payment_id, dto.razorpay_signature);
+    println!(
+        "Verifying payment: subscription_id={}, order_id={}, payment_id={}, signature={}",
+        dto.subscription_id, dto.razorpay_order_id, dto.razorpay_payment_id, dto.razorpay_signature
+    );
 
     // Verify Razorpay signature
     let secret = std::env::var("RAZORPAY_KEY_SECRET")
@@ -138,7 +158,10 @@ pub async fn verify_job_seeker_payment(
 
     mac.update(payload.as_bytes());
     let expected_signature = hex::encode(mac.finalize().into_bytes());
-    println!("Expected signature: {}, Provided signature: {}", expected_signature, dto.razorpay_signature);
+    println!(
+        "Expected signature: {}, Provided signature: {}",
+        expected_signature, dto.razorpay_signature
+    );
 
     if expected_signature != dto.razorpay_signature {
         return Err(ApiError::bad_request("Invalid payment signature"));
@@ -169,7 +192,10 @@ pub async fn verify_job_seeker_payment(
         .map_err(|e| ApiError::internal_error(e.to_string()))?;
 
     // Debug: log update results
-    println!("Update result matched_count={}, modified_count={}", result.matched_count, result.modified_count);
+    println!(
+        "Update result matched_count={}, modified_count={}",
+        result.matched_count, result.modified_count
+    );
 
     if result.matched_count == 0 {
         return Err(ApiError::not_found("Subscription not found"));
@@ -337,9 +363,13 @@ pub async fn create_job_seeker_profile(
         db.inner(),
         "new_job_seeker".to_string(),
         "New Job Seeker Registered".to_string(),
-        format!("A new job seeker '{}' has registered and is pending verification.", dto.full_name),
+        format!(
+            "A new job seeker '{}' has registered and is pending verification.",
+            dto.full_name
+        ),
         Some(profile_id),
-    ).await;
+    )
+    .await;
 
     Ok(Json(ApiResponse::success_with_message(
         "Job seeker profile created successfully".to_string(),
@@ -452,18 +482,21 @@ pub async fn create_job_post(
         updated_at: now,
     };
 
-    let res = db.collection::<crate::models::JobPost>("jobs")
+    let res = db
+        .collection::<crate::models::JobPost>("jobs")
         .insert_one(&job, None)
         .await
         .map_err(|e| ApiError::internal_error(format!("Failed to create job: {}", e)))?;
 
-    let job_id = res.inserted_id.as_object_id()
+    let job_id = res
+        .inserted_id
+        .as_object_id()
         .ok_or_else(|| ApiError::internal_error("Invalid job ID"))?
         .to_hex();
 
     Ok(Json(ApiResponse::success_with_message(
         "Job created and pending admin approval".to_string(),
-        serde_json::json!({ "job_id": job_id })
+        serde_json::json!({ "job_id": job_id }),
     )))
 }
 
@@ -493,21 +526,29 @@ pub async fn get_my_jobs(
     let find_options = FindOptions::builder()
         .skip(skip as u64)
         .limit(limit)
-        .sort(doc!{ "created_at": -1 })
+        .sort(doc! { "created_at": -1 })
         .build();
 
-    let mut cursor = db.collection::<crate::models::JobPost>("jobs")
+    let mut cursor = db
+        .collection::<crate::models::JobPost>("jobs")
         .find(filter.clone(), find_options)
         .await
         .map_err(|e| ApiError::internal_error(format!("Database error: {}", e)))?;
 
     let mut jobs: Vec<crate::models::JobPostResponse> = Vec::new();
-    while cursor.advance().await.map_err(|e| ApiError::internal_error(format!("Cursor error: {}", e)))? {
-        let job = cursor.deserialize_current().map_err(|e| ApiError::internal_error(format!("Deserialization error: {}", e)))?;
+    while cursor
+        .advance()
+        .await
+        .map_err(|e| ApiError::internal_error(format!("Cursor error: {}", e)))?
+    {
+        let job = cursor
+            .deserialize_current()
+            .map_err(|e| ApiError::internal_error(format!("Deserialization error: {}", e)))?;
         jobs.push(job.into());
     }
 
-    let total = db.collection::<crate::models::JobPost>("jobs")
+    let total = db
+        .collection::<crate::models::JobPost>("jobs")
         .count_documents(filter, None)
         .await
         .map_err(|e| ApiError::internal_error(format!("Count error: {}", e)))?;
@@ -549,32 +590,43 @@ pub async fn get_public_jobs(
 
     if let Some(q) = query.q {
         if !q.is_empty() {
-            filter.insert("$or", vec![
-                doc! { "title": { "$regex": &q, "$options": "i" } },
-                doc! { "company_name": { "$regex": &q, "$options": "i" } },
-                doc! { "job_role": { "$regex": &q, "$options": "i" } },
-            ]);
+            filter.insert(
+                "$or",
+                vec![
+                    doc! { "title": { "$regex": &q, "$options": "i" } },
+                    doc! { "company_name": { "$regex": &q, "$options": "i" } },
+                    doc! { "job_role": { "$regex": &q, "$options": "i" } },
+                ],
+            );
         }
     }
 
     let find_options = FindOptions::builder()
         .skip(skip as u64)
         .limit(limit)
-        .sort(doc!{ "created_at": -1 })
+        .sort(doc! { "created_at": -1 })
         .build();
 
-    let mut cursor = db.collection::<crate::models::JobPost>("jobs")
+    let mut cursor = db
+        .collection::<crate::models::JobPost>("jobs")
         .find(filter.clone(), find_options)
         .await
         .map_err(|e| ApiError::internal_error(format!("Database error: {}", e)))?;
 
     let mut jobs: Vec<crate::models::JobPostResponse> = Vec::new();
-    while cursor.advance().await.map_err(|e| ApiError::internal_error(format!("Cursor error: {}", e)))? {
-        let job = cursor.deserialize_current().map_err(|e| ApiError::internal_error(format!("Deserialization error: {}", e)))?;
+    while cursor
+        .advance()
+        .await
+        .map_err(|e| ApiError::internal_error(format!("Cursor error: {}", e)))?
+    {
+        let job = cursor
+            .deserialize_current()
+            .map_err(|e| ApiError::internal_error(format!("Deserialization error: {}", e)))?;
         jobs.push(job.into());
     }
 
-    let total = db.collection::<crate::models::JobPost>("jobs")
+    let total = db
+        .collection::<crate::models::JobPost>("jobs")
         .count_documents(filter, None)
         .await
         .map_err(|e| ApiError::internal_error(format!("Count error: {}", e)))?;
@@ -597,9 +649,11 @@ pub async fn get_job_by_id(
     auth: Option<AuthGuard>,
     job_id: String,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
-    let object_id = ObjectId::parse_str(&job_id).map_err(|_| ApiError::bad_request("Invalid job ID"))?;
+    let object_id =
+        ObjectId::parse_str(&job_id).map_err(|_| ApiError::bad_request("Invalid job ID"))?;
 
-    let job = db.collection::<crate::models::JobPost>("jobs")
+    let job = db
+        .collection::<crate::models::JobPost>("jobs")
         .find_one(doc! { "_id": object_id }, None)
         .await
         .map_err(|e| ApiError::internal_error(format!("Database error: {}", e)))?
@@ -629,9 +683,11 @@ pub async fn upload_job_document(
     auth: AuthGuard,
     job_id: String,
 ) -> Result<Json<ApiResponse<serde_json::Value>>, ApiError> {
-    let object_id = ObjectId::parse_str(&job_id).map_err(|_| ApiError::bad_request("Invalid job ID"))?;
+    let object_id =
+        ObjectId::parse_str(&job_id).map_err(|_| ApiError::bad_request("Invalid job ID"))?;
 
-    let job = db.collection::<crate::models::JobPost>("jobs")
+    let job = db
+        .collection::<crate::models::JobPost>("jobs")
         .find_one(doc! { "_id": object_id }, None)
         .await
         .map_err(|e| ApiError::internal_error(format!("Database error: {}", e)))?
@@ -643,10 +699,13 @@ pub async fn upload_job_document(
 
     // Reuse document upload logic from file_upload.rs but save into uploads/documents/jobs
     let extension = if let Some(name) = file.name() {
-        get_extension_from_filename(name).ok_or_else(|| ApiError::bad_request("Cannot determine file extension"))?
+        get_extension_from_filename(name)
+            .ok_or_else(|| ApiError::bad_request("Cannot determine file extension"))?
     } else if let Some(ct) = file.content_type() {
         let ct_str = ct.to_string();
-        extension_from_content_type(&ct_str).ok_or_else(|| ApiError::bad_request("Cannot determine file extension from content type"))?
+        extension_from_content_type(&ct_str).ok_or_else(|| {
+            ApiError::bad_request("Cannot determine file extension from content type")
+        })?
     } else {
         return Err(ApiError::bad_request("Cannot determine file type"));
     };
@@ -656,14 +715,25 @@ pub async fn upload_job_document(
     }
 
     let upload_dir = "uploads/documents/jobs";
-    tokio::fs::create_dir_all(upload_dir).await.map_err(|e| ApiError::internal_error(format!("Failed to create directory: {}", e)))?;
+    tokio::fs::create_dir_all(upload_dir)
+        .await
+        .map_err(|e| ApiError::internal_error(format!("Failed to create directory: {}", e)))?;
 
-    let filename = format!("{}_{}.{}", Uuid::new_v4(), chrono::Utc::now().timestamp(), extension);
+    let filename = format!(
+        "{}_{}.{}",
+        Uuid::new_v4(),
+        chrono::Utc::now().timestamp(),
+        extension
+    );
     let filepath = format!("{}/{}", upload_dir, filename);
 
-    file.persist_to(&filepath).await.map_err(|e| ApiError::internal_error(format!("Failed to save file: {}", e)))?;
+    file.persist_to(&filepath)
+        .await
+        .map_err(|e| ApiError::internal_error(format!("Failed to save file: {}", e)))?;
 
-    let file_url = std::env::var("APP_BASE_URL").map(|base| format!("{}{}", base.trim_end_matches('/'), format!("/{}", filepath))).unwrap_or_else(|_| format!("/{}", filepath));
+    let file_url = std::env::var("APP_BASE_URL")
+        .map(|base| format!("{}{}", base.trim_end_matches('/'), format!("/{}", filepath)))
+        .unwrap_or_else(|_| format!("/{}", filepath));
 
     db.collection::<crate::models::JobPost>("jobs").update_one(
         doc! { "_id": object_id },
@@ -671,7 +741,9 @@ pub async fn upload_job_document(
         None
     ).await.map_err(|e| ApiError::internal_error(format!("Failed to update job: {}", e)))?;
 
-    Ok(Json(ApiResponse::success(serde_json::json!({ "url": file_url, "message": "Document uploaded" }))))
+    Ok(Json(ApiResponse::success(
+        serde_json::json!({ "url": file_url, "message": "Document uploaded" }),
+    )))
 }
 
 #[openapi(tag = "JobSeeker")]
@@ -707,13 +779,15 @@ pub async fn update_job_seeker_profile(
         update_doc.insert("experience_years", experience);
     }
     if let Some(ref education) = dto.education {
-        let education_bson = mongodb::bson::to_bson(education)
-            .map_err(|e| ApiError::internal_error(format!("Failed to serialize education: {}", e)))?;
+        let education_bson = mongodb::bson::to_bson(education).map_err(|e| {
+            ApiError::internal_error(format!("Failed to serialize education: {}", e))
+        })?;
         update_doc.insert("education", education_bson);
     }
     if let Some(ref work_experience) = dto.work_experience {
-        let work_exp_bson = mongodb::bson::to_bson(work_experience)
-            .map_err(|e| ApiError::internal_error(format!("Failed to serialize work experience: {}", e)))?;
+        let work_exp_bson = mongodb::bson::to_bson(work_experience).map_err(|e| {
+            ApiError::internal_error(format!("Failed to serialize work experience: {}", e))
+        })?;
         update_doc.insert("work_experience", work_exp_bson);
     }
     if let Some(ref categories) = dto.preferred_categories {
