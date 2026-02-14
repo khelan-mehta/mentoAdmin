@@ -517,8 +517,10 @@ const InvoiceExportModal = ({
 
         return {
           invoiceNumber:
-            getInvoiceNumber(subId) ||
-            `MENTO/${invoiceDate.getFullYear()}${String(invoiceDate.getMonth() + 1).padStart(2, "0")}/00000`,
+            sub.invoice_number
+              ? `MENTO/${invoiceDate.getFullYear()}${String(invoiceDate.getMonth() + 1).padStart(2, "0")}/${String(sub.invoice_number).padStart(5, "0")}`
+              : getInvoiceNumber(subId) ||
+                `MENTO/${invoiceDate.getFullYear()}${String(invoiceDate.getMonth() + 1).padStart(2, "0")}/00000`,
           invoiceDate: invoiceDate.toISOString().split("T")[0],
           customerName: sub.full_name || sub.name || "N/A",
           customerEmail: sub.user_email || "N/A",
@@ -1420,12 +1422,13 @@ const SubscriptionDetailModal = ({ subscription, onClose }: any) => {
       const planPrice = planPricing[plan] || 0;
       const gst = calculateGSTInclusive(planPrice, isInterState);
 
-      // Get persistent invoice number (keyed by subscription ID, not user ID)
+      // Get persistent invoice number (prefer backend invoice_number, fallback to localStorage)
       const subId = subscription.id || subscription._id?.$oid || "";
-      const invoiceNumber =
-        getInvoiceNumber(subId) ||
-        `MENTO/${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, "0")}/00000`;
       const invoiceDate = new Date();
+      const invoiceNumber = subscription.invoice_number
+        ? `MENTO/${invoiceDate.getFullYear()}${String(invoiceDate.getMonth() + 1).padStart(2, "0")}/${String(subscription.invoice_number).padStart(5, "0")}`
+        : getInvoiceNumber(subId) ||
+          `MENTO/${invoiceDate.getFullYear()}${String(invoiceDate.getMonth() + 1).padStart(2, "0")}/00000`;
       const invoiceDateStr = `${String(invoiceDate.getDate()).padStart(2, "0")}-${String(invoiceDate.getMonth() + 1).padStart(2, "0")}-${invoiceDate.getFullYear()}`;
 
       // Subscription period
@@ -3275,6 +3278,43 @@ export const Subscriptions = () => {
         allSubscriptions.push(...workersWithUserData);
       }
 
+      // Fetch subscription records from backend to get invoice numbers
+      try {
+        const subsResponse = await fetch(
+          `${API_BASE_URL}/admin/subscriptions?limit=10000`,
+          {
+            headers: {
+              Authorization: `Bearer ${localStorage.getItem("accessToken") || localStorage.getItem("token") || ""}`,
+            },
+          },
+        );
+        if (subsResponse.ok) {
+          const subsData = await subsResponse.json();
+          const subRecords = subsData.data?.subscriptions || [];
+          // Build map: user_id -> latest invoice_number
+          const invoiceMap: Record<string, number> = {};
+          for (const rec of subRecords) {
+            const userId = rec.user_id?.$oid || rec.user_id || "";
+            const invNum = rec.invoice_number;
+            if (userId && invNum != null) {
+              // Keep the highest invoice_number per user (most recent)
+              if (!invoiceMap[userId] || invNum > invoiceMap[userId]) {
+                invoiceMap[userId] = invNum;
+              }
+            }
+          }
+          // Merge invoice numbers into profile data
+          for (const sub of allSubscriptions) {
+            const userId = sub.user_id?.$oid || sub.user_id || "";
+            if (userId && invoiceMap[userId]) {
+              sub.invoice_number = invoiceMap[userId];
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching invoice numbers:", err);
+      }
+
       setSubscriptions(allSubscriptions);
 
       // Pre-assign sequential invoice numbers in display order
@@ -3373,6 +3413,9 @@ export const Subscriptions = () => {
   // Filter subscriptions based on search, view, and plan filters
   const filteredSubscriptions = useMemo(() => {
     return subscriptions.filter((sub) => {
+      const invoiceNum = sub.invoice_number
+        ? String(sub.invoice_number)
+        : "";
       const matchesSearch =
         (sub.full_name || sub.name || "")
           .toLowerCase()
@@ -3384,7 +3427,8 @@ export const Subscriptions = () => {
         (sub.user_email || "")
           .toLowerCase()
           .includes(searchQuery.toLowerCase()) ||
-        (sub.user_city || "").toLowerCase().includes(searchQuery.toLowerCase());
+        (sub.user_city || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+        invoiceNum.includes(searchQuery);
 
       const matchesView = activeView === "all" || sub.userType === activeView;
 
@@ -3629,7 +3673,7 @@ export const Subscriptions = () => {
               />
               <input
                 type="text"
-                placeholder="Search by name, phone, email..."
+                placeholder="Search by name, phone, email, invoice #..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 style={{
@@ -3724,6 +3768,7 @@ export const Subscriptions = () => {
                     "Contact",
                     "Type",
                     "Plan",
+                    "Invoice #",
                     "Details",
                     "Actions",
                   ].map((header) => (
@@ -3922,6 +3967,35 @@ export const Subscriptions = () => {
                       </td>
                       <td style={{ padding: "16px" }}>
                         {getPlanBadge(sub.subscription_plan)}
+                      </td>
+                      <td style={{ padding: "16px" }}>
+                        {sub.invoice_number ? (
+                          <span
+                            style={{
+                              display: "inline-flex",
+                              alignItems: "center",
+                              gap: "4px",
+                              padding: "4px 10px",
+                              borderRadius: "8px",
+                              fontSize: "13px",
+                              fontWeight: "600",
+                              background: "#EEF2FF",
+                              color: "#4F46E5",
+                              fontFamily: "monospace",
+                            }}
+                          >
+                            #{sub.invoice_number}
+                          </span>
+                        ) : (
+                          <span
+                            style={{
+                              fontSize: "12px",
+                              color: theme.colors.textSecondary,
+                            }}
+                          >
+                            --
+                          </span>
+                        )}
                       </td>
                       <td
                         style={{

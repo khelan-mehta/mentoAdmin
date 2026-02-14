@@ -31,6 +31,8 @@ pub struct Subscription {
     pub expires_at: DateTime,
     pub auto_renew: bool,
     pub payment_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub invoice_number: Option<i64>,
     pub created_at: DateTime,
     pub updated_at: DateTime,
 }

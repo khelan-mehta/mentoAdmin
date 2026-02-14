@@ -1095,10 +1095,18 @@ pub async fn get_all_subscriptions(
         filter.insert("status", status);
     }
 
+    // If search is a pure number, filter by invoice_number directly in DB
+    let invoice_number_search: Option<i64> = query.search.as_ref()
+        .and_then(|s| s.trim().parse::<i64>().ok());
+
+    if let Some(inv_num) = invoice_number_search {
+        filter.insert("invoice_number", inv_num);
+    }
+
     let find_options = FindOptions::builder()
         .skip(skip as u64)
         .limit(limit)
-        .sort(doc! { "created_at": -1 })
+        .sort(doc! { "invoice_number": 1 })
         .build();
 
     let mut cursor = db.collection::<Subscription>("subscriptions")
@@ -1133,9 +1141,10 @@ pub async fn get_all_subscriptions(
         subscriptions_with_user_data.push(sub_json);
     }
 
-    // If search is provided, filter by user name/mobile/email
+    // If search is provided (and not a pure number already handled above),
+    // filter by user name/mobile/email
     let final_subscriptions = if let Some(ref search_term) = query.search {
-        if !search_term.is_empty() {
+        if !search_term.is_empty() && invoice_number_search.is_none() {
             let term = search_term.to_lowercase();
             subscriptions_with_user_data
                 .into_iter()
@@ -1143,9 +1152,14 @@ pub async fn get_all_subscriptions(
                     let name = s.get("user_name").and_then(|v| v.as_str()).unwrap_or("");
                     let mobile = s.get("user_mobile").and_then(|v| v.as_str()).unwrap_or("");
                     let email = s.get("user_email").and_then(|v| v.as_str()).unwrap_or("");
+                    let inv_num = s.get("invoice_number")
+                        .and_then(|v| v.as_i64())
+                        .map(|n| n.to_string())
+                        .unwrap_or_default();
                     name.to_lowercase().contains(&term)
                         || mobile.contains(&term)
                         || email.to_lowercase().contains(&term)
+                        || inv_num.contains(search_term.as_str())
                 })
                 .collect()
         } else {
@@ -1209,6 +1223,21 @@ pub async fn create_subscription(
     let expires_at_millis = now.timestamp_millis() + (duration_days * 24 * 60 * 60 * 1000);
     let expires_at = DateTime::from_millis(expires_at_millis);
 
+    // Auto-increment invoice number: find the current max and add 1
+    let max_invoice = db.collection::<Subscription>("subscriptions")
+        .find_one(
+            doc! { "invoice_number": { "$exists": true } },
+            mongodb::options::FindOneOptions::builder()
+                .sort(doc! { "invoice_number": -1 })
+                .build(),
+        )
+        .await
+        .map_err(|e| ApiError::internal_error(format!("Database error: {}", e)))?;
+
+    let next_invoice_number = max_invoice
+        .and_then(|s| s.invoice_number)
+        .unwrap_or(0) + 1;
+
     let subscription = Subscription {
         id: None,
         user_id: user_object_id,
@@ -1224,6 +1253,7 @@ pub async fn create_subscription(
         expires_at,
         auto_renew: dto.auto_renew.unwrap_or(false),
         payment_id: dto.payment_id.clone(),
+        invoice_number: Some(next_invoice_number),
         created_at: now,
         updated_at: now,
     };
@@ -1280,7 +1310,8 @@ pub async fn create_subscription(
     Ok(Json(ApiResponse::success_with_message(
         "Subscription created successfully".to_string(),
         serde_json::json!({
-            "id": result.inserted_id.as_object_id().unwrap().to_hex()
+            "id": result.inserted_id.as_object_id().unwrap().to_hex(),
+            "invoice_number": next_invoice_number
         })
     )))
 }

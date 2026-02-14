@@ -74,6 +74,22 @@ pub async fn create_subscription(
         .await
         .map_err(|e| ApiError::internal_error(format!("Failed to create payment order: {}", e)))?;
 
+    // Auto-increment invoice number: find the current max and add 1
+    let max_invoice = db
+        .collection::<Subscription>("subscriptions")
+        .find_one(
+            doc! { "invoice_number": { "$exists": true } },
+            mongodb::options::FindOneOptions::builder()
+                .sort(doc! { "invoice_number": -1 })
+                .build(),
+        )
+        .await
+        .map_err(|e| ApiError::internal_error(format!("Database error: {}", e)))?;
+
+    let next_invoice_number = max_invoice
+        .and_then(|s| s.invoice_number)
+        .unwrap_or(0) + 1;
+
     // Create subscription with pending status
     let subscription = Subscription {
         id: None,
@@ -86,6 +102,7 @@ pub async fn create_subscription(
         expires_at,
         auto_renew: false,
         payment_id: None,
+        invoice_number: Some(next_invoice_number),
         created_at: now,
         updated_at: now,
     };
