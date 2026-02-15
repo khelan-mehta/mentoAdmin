@@ -18,6 +18,7 @@ pub struct NearbyWorkerQuery {
 #[serde(rename_all = "lowercase")]
 pub enum WorkerSubscriptionPlan {
     None,
+    Basic,
     Silver,
     Gold,
 }
