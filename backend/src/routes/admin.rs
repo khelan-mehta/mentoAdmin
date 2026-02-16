@@ -570,21 +570,31 @@ pub async fn delete_subcategory(
 pub struct Job {
     #[serde(rename = "_id", skip_serializing_if = "Option::is_none")]
     pub id: Option<ObjectId>,
+
     pub title: String,
     pub company: Option<String>,
     pub description: Option<String>,
     pub location: Option<String>,
     pub job_type: Option<String>,
     pub category: Option<String>,
+
     pub salary_min: Option<f64>,
     pub salary_max: Option<f64>,
+
     pub requirements: Option<Vec<String>>,
+
     pub status: String,
     pub rejection_reason: Option<String>,
+
     #[serde(default)]
     pub applications_count: i32,
+
     pub posted_by: Option<ObjectId>,
+
+    #[serde(default = "DateTime::now")]
     pub created_at: DateTime,
+
+    #[serde(default = "DateTime::now")]
     pub updated_at: DateTime,
 }
 

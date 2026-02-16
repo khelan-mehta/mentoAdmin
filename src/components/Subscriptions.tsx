@@ -319,26 +319,27 @@ const numberToWords = (num: number): string => {
 };
 
 // Get financial year period string
-const getFinancialYearPeriod = (dateValue: any): string => {
-  let date: Date;
-  try {
-    if (dateValue?.$date?.$numberLong) {
-      date = new Date(parseInt(dateValue.$date.$numberLong));
-    } else if (dateValue?.$date) {
-      date = new Date(dateValue.$date);
-    } else {
-      date = new Date(dateValue);
-    }
-    if (isNaN(date.getTime())) date = new Date();
-  } catch {
-    date = new Date();
+const getFinancialYearPeriod = (): string => {
+  const today = new Date();
+  const month = today.getMonth(); // 0 = Jan, 3 = April
+  const year = today.getFullYear();
+
+  let fyStart: number;
+  let fyEnd: number;
+
+  if (month >= 3) {
+    // April (3) to December
+    fyStart = year;
+    fyEnd = year + 1;
+  } else {
+    // January to March
+    fyStart = year - 1;
+    fyEnd = year;
   }
-  const month = date.getMonth(); // 0-indexed
-  const year = date.getFullYear();
-  const fyStart = month >= 3 ? year : year - 1;
-  const fyEnd = fyStart + 1;
+
   return `01.04.${fyStart} to 31.03.${fyEnd}`;
 };
+
 
 // Fetch KYC details for a user
 const fetchKycDetails = async (userId: string): Promise<any> => {
@@ -1439,9 +1440,7 @@ const SubscriptionDetailModal = ({ subscription, onClose }: any) => {
       const invoiceDateStr = `${String(invoiceDate.getDate()).padStart(2, "0")}-${String(invoiceDate.getMonth() + 1).padStart(2, "0")}-${invoiceDate.getFullYear()}`;
 
       // Subscription period
-      const period = getFinancialYearPeriod(
-        subscription.subscription_expires_at || subscription.created_at,
-      );
+      const period = getFinancialYearPeriod();
 
       // Plan display name
       const planDisplayName =
