@@ -581,6 +581,7 @@ pub struct Job {
     pub requirements: Option<Vec<String>>,
     pub status: String,
     pub rejection_reason: Option<String>,
+    #[serde(default)]
     pub applications_count: i32,
     pub posted_by: Option<ObjectId>,
     pub created_at: DateTime,

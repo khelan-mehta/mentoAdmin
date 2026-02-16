@@ -161,11 +161,24 @@ const getInvoiceTrackingData = (): InvoiceTrackingData => {
   return { counter: 0, subscriptionInvoices: {} };
 };
 
+// Get current financial year string (Indian FY: April-March)
+// e.g. if current date is Feb 2026, FY is "2025-26"
+const getCurrentFinancialYear = (): string => {
+  const now = new Date();
+  const month = now.getMonth(); // 0-indexed (0=Jan, 3=Apr)
+  const year = now.getFullYear();
+  const fyStart = month >= 3 ? year : year - 1;
+  const fyEnd = fyStart + 1;
+  return `${fyStart}-${String(fyEnd).slice(2)}`;
+};
+
 // Assign sequential invoice numbers to all subscriptions in display order.
 // Only assigns new numbers; existing assignments are never changed.
+// Uses current financial year in format: MENTO/FY2025-26/00001
 const assignInvoiceNumbers = (subscriptions: any[]): void => {
   const data = getInvoiceTrackingData();
   let changed = false;
+  const fy = getCurrentFinancialYear();
 
   for (const sub of subscriptions) {
     const subId = sub.id || sub._id?.$oid || "";
@@ -173,11 +186,8 @@ const assignInvoiceNumbers = (subscriptions: any[]): void => {
     if (data.subscriptionInvoices[subId]) continue;
 
     data.counter++;
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, "0");
     const sequence = String(data.counter).padStart(5, "0");
-    data.subscriptionInvoices[subId] = `MENTO/${year}${month}/${sequence}`;
+    data.subscriptionInvoices[subId] = `MENTO/FY${fy}/${sequence}`;
     changed = true;
   }
 
@@ -517,10 +527,8 @@ const InvoiceExportModal = ({
 
         return {
           invoiceNumber:
-            sub.invoice_number
-              ? `MENTO/${invoiceDate.getFullYear()}${String(invoiceDate.getMonth() + 1).padStart(2, "0")}/${String(sub.invoice_number).padStart(5, "0")}`
-              : getInvoiceNumber(subId) ||
-                `MENTO/${invoiceDate.getFullYear()}${String(invoiceDate.getMonth() + 1).padStart(2, "0")}/00000`,
+            getInvoiceNumber(subId) ||
+              `MENTO/FY${getCurrentFinancialYear()}/00000`,
           invoiceDate: invoiceDate.toISOString().split("T")[0],
           customerName: sub.full_name || sub.name || "N/A",
           customerEmail: sub.user_email || "N/A",
@@ -1422,13 +1430,12 @@ const SubscriptionDetailModal = ({ subscription, onClose }: any) => {
       const planPrice = planPricing[plan] || 0;
       const gst = calculateGSTInclusive(planPrice, isInterState);
 
-      // Get persistent invoice number (prefer backend invoice_number, fallback to localStorage)
+      // Get persistent invoice number from frontend sequential assignment
       const subId = subscription.id || subscription._id?.$oid || "";
       const invoiceDate = new Date();
-      const invoiceNumber = subscription.invoice_number
-        ? `MENTO/${invoiceDate.getFullYear()}${String(invoiceDate.getMonth() + 1).padStart(2, "0")}/${String(subscription.invoice_number).padStart(5, "0")}`
-        : getInvoiceNumber(subId) ||
-          `MENTO/${invoiceDate.getFullYear()}${String(invoiceDate.getMonth() + 1).padStart(2, "0")}/00000`;
+      const invoiceNumber =
+        getInvoiceNumber(subId) ||
+        `MENTO/FY${getCurrentFinancialYear()}/00000`;
       const invoiceDateStr = `${String(invoiceDate.getDate()).padStart(2, "0")}-${String(invoiceDate.getMonth() + 1).padStart(2, "0")}-${invoiceDate.getFullYear()}`;
 
       // Subscription period
@@ -3278,43 +3285,6 @@ export const Subscriptions = () => {
         allSubscriptions.push(...workersWithUserData);
       }
 
-      // Fetch subscription records from backend to get invoice numbers
-      try {
-        const subsResponse = await fetch(
-          `${API_BASE_URL}/admin/subscriptions?limit=10000`,
-          {
-            headers: {
-              Authorization: `Bearer ${localStorage.getItem("accessToken") || localStorage.getItem("token") || ""}`,
-            },
-          },
-        );
-        if (subsResponse.ok) {
-          const subsData = await subsResponse.json();
-          const subRecords = subsData.data?.subscriptions || [];
-          // Build map: user_id -> latest invoice_number
-          const invoiceMap: Record<string, number> = {};
-          for (const rec of subRecords) {
-            const userId = rec.user_id?.$oid || rec.user_id || "";
-            const invNum = rec.invoice_number;
-            if (userId && invNum != null) {
-              // Keep the highest invoice_number per user (most recent)
-              if (!invoiceMap[userId] || invNum > invoiceMap[userId]) {
-                invoiceMap[userId] = invNum;
-              }
-            }
-          }
-          // Merge invoice numbers into profile data
-          for (const sub of allSubscriptions) {
-            const userId = sub.user_id?.$oid || sub.user_id || "";
-            if (userId && invoiceMap[userId]) {
-              sub.invoice_number = invoiceMap[userId];
-            }
-          }
-        }
-      } catch (err) {
-        console.error("Error fetching invoice numbers:", err);
-      }
-
       setSubscriptions(allSubscriptions);
 
       // Pre-assign sequential invoice numbers in display order
@@ -3413,9 +3383,8 @@ export const Subscriptions = () => {
   // Filter subscriptions based on search, view, and plan filters
   const filteredSubscriptions = useMemo(() => {
     return subscriptions.filter((sub) => {
-      const invoiceNum = sub.invoice_number
-        ? String(sub.invoice_number)
-        : "";
+      const subId = sub.id || sub._id?.$oid || "";
+      const invoiceNum = getInvoiceNumber(subId);
       const matchesSearch =
         (sub.full_name || sub.name || "")
           .toLowerCase()
@@ -3969,33 +3938,37 @@ export const Subscriptions = () => {
                         {getPlanBadge(sub.subscription_plan)}
                       </td>
                       <td style={{ padding: "16px" }}>
-                        {sub.invoice_number ? (
-                          <span
-                            style={{
-                              display: "inline-flex",
-                              alignItems: "center",
-                              gap: "4px",
-                              padding: "4px 10px",
-                              borderRadius: "8px",
-                              fontSize: "13px",
-                              fontWeight: "600",
-                              background: "#EEF2FF",
-                              color: "#4F46E5",
-                              fontFamily: "monospace",
-                            }}
-                          >
-                            #{sub.invoice_number}
-                          </span>
-                        ) : (
-                          <span
-                            style={{
-                              fontSize: "12px",
-                              color: theme.colors.textSecondary,
-                            }}
-                          >
-                            --
-                          </span>
-                        )}
+                        {(() => {
+                          const subId = sub.id || sub._id?.$oid || "";
+                          const invNum = getInvoiceNumber(subId);
+                          return invNum ? (
+                            <span
+                              style={{
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "4px",
+                                padding: "4px 10px",
+                                borderRadius: "8px",
+                                fontSize: "13px",
+                                fontWeight: "600",
+                                background: "#EEF2FF",
+                                color: "#4F46E5",
+                                fontFamily: "monospace",
+                              }}
+                            >
+                              {invNum}
+                            </span>
+                          ) : (
+                            <span
+                              style={{
+                                fontSize: "12px",
+                                color: theme.colors.textSecondary,
+                              }}
+                            >
+                              --
+                            </span>
+                          );
+                        })()}
                       </td>
                       <td
                         style={{

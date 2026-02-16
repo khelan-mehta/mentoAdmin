@@ -562,11 +562,13 @@ const JobDetailModal = ({
   onApprove,
   onReject,
   onDelete,
+  onCloseJob,
   isLoading,
 }: any) => {
   const [rejectionReason, setRejectionReason] = useState("");
   const [showRejectForm, setShowRejectForm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
 
   if (!job) return null;
 
@@ -1127,6 +1129,81 @@ const JobDetailModal = ({
                   </button>
                 </div>
               </div>
+            ) : showCloseConfirm ? (
+              <div
+                style={{
+                  padding: "16px",
+                  background: "#F3F4F6",
+                  borderRadius: "8px",
+                  marginBottom: "16px",
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "8px",
+                    marginBottom: "12px",
+                  }}
+                >
+                  <AlertCircle size={20} color={theme.colors.textSecondary} />
+                  <p
+                    style={{
+                      margin: 0,
+                      color: theme.colors.text,
+                      fontWeight: "600",
+                    }}
+                  >
+                    Are you sure you want to close this job?
+                  </p>
+                </div>
+                <div style={{ display: "flex", gap: "12px" }}>
+                  <button
+                    onClick={() => setShowCloseConfirm(false)}
+                    style={{
+                      flex: 1,
+                      padding: "10px",
+                      background: theme.colors.background,
+                      border: `1px solid ${theme.colors.border}`,
+                      borderRadius: "8px",
+                      fontSize: "14px",
+                      fontWeight: "600",
+                      cursor: "pointer",
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => onCloseJob(job.id || job._id?.$oid)}
+                    disabled={isLoading}
+                    style={{
+                      flex: 1,
+                      padding: "10px",
+                      background: theme.colors.textSecondary,
+                      color: "white",
+                      border: "none",
+                      borderRadius: "8px",
+                      fontSize: "14px",
+                      fontWeight: "600",
+                      cursor: isLoading ? "not-allowed" : "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: "8px",
+                    }}
+                  >
+                    {isLoading ? (
+                      <Loader2
+                        size={16}
+                        style={{ animation: "spin 1s linear infinite" }}
+                      />
+                    ) : (
+                      <XCircle size={16} />
+                    )}
+                    Confirm Close
+                  </button>
+                </div>
+              </div>
             ) : (
               <div style={{ display: "flex", gap: "12px", flexWrap: "wrap" }}>
                 <button
@@ -1149,6 +1226,28 @@ const JobDetailModal = ({
                   <Trash2 size={16} />
                   Delete
                 </button>
+                {job.status === "active" && (
+                  <button
+                    onClick={() => setShowCloseConfirm(true)}
+                    disabled={isLoading}
+                    style={{
+                      padding: "12px 20px",
+                      background: theme.colors.background,
+                      color: theme.colors.textSecondary,
+                      border: `1px solid ${theme.colors.textSecondary}`,
+                      borderRadius: "8px",
+                      fontSize: "14px",
+                      fontWeight: "600",
+                      cursor: isLoading ? "not-allowed" : "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      gap: "8px",
+                    }}
+                  >
+                    <XCircle size={16} />
+                    Close Job
+                  </button>
+                )}
                 {job.status === "pending" && (
                   <>
                     <button
@@ -1331,6 +1430,31 @@ export const Jobs = () => {
       }
     } catch (error) {
       console.error("Error deleting job:", error);
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleCloseJob = async (jobId: string) => {
+    try {
+      setActionLoading(true);
+      const response = await fetch(
+        `${API_BASE_URL}/admin/jobs/${jobId}/status`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${localStorage.getItem("accessToken") || localStorage.getItem("token") || ""}`,
+          },
+          body: JSON.stringify({ status: "closed" }),
+        },
+      );
+      if (response.ok) {
+        setSelectedJob(null);
+        fetchJobs();
+      }
+    } catch (error) {
+      console.error("Error closing job:", error);
     } finally {
       setActionLoading(false);
     }
@@ -1756,6 +1880,7 @@ export const Jobs = () => {
           onApprove={handleApproveJob}
           onReject={handleRejectJob}
           onDelete={handleDeleteJob}
+          onCloseJob={handleCloseJob}
           isLoading={actionLoading}
         />
       )}        
