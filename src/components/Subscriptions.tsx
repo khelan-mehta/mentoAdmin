@@ -420,12 +420,27 @@ const InvoiceExportModal = ({
   const parseDateValue = (dateValue: any): Date | null => {
     if (!dateValue) return null;
     try {
+      // MongoDB extended JSON v2: { "$date": { "$numberLong": "..." } }
       if (dateValue?.$date?.$numberLong) {
         return new Date(parseInt(dateValue.$date.$numberLong));
       }
+      // MongoDB extended JSON v1: { "$date": "..." } or { "$date": <number> }
       if (dateValue?.$date) {
-        return new Date(dateValue.$date);
+        const inner = dateValue.$date;
+        if (typeof inner === "number") return new Date(inner);
+        if (typeof inner === "string" && /^\d+$/.test(inner))
+          return new Date(parseInt(inner));
+        return new Date(inner);
       }
+      // Plain numeric string (millisecond timestamp as string)
+      if (typeof dateValue === "string" && /^\d{10,}$/.test(dateValue)) {
+        return new Date(parseInt(dateValue));
+      }
+      // Plain number (millisecond timestamp)
+      if (typeof dateValue === "number") {
+        return new Date(dateValue);
+      }
+      // ISO string or other parseable date string
       const d = new Date(dateValue);
       if (!isNaN(d.getTime())) return d;
     } catch {}
@@ -448,10 +463,10 @@ const InvoiceExportModal = ({
       // Filter by plan
       if (planFilter !== "all" && plan !== planFilter) return false;
 
-      // Filter by date range (subscription expiry date)
+      // Filter by date range (subscription purchase/creation date)
       if (dateFrom || dateTo) {
         const subDate = parseDateValue(
-          sub.subscription_expires_at || sub.created_at,
+          sub.created_at || sub.subscription_expires_at,
         );
         if (subDate) {
           if (dateFrom) {
@@ -1175,7 +1190,7 @@ const InvoiceExportModal = ({
                     size={14}
                     style={{ marginRight: "6px", verticalAlign: "middle" }}
                   />
-                  Date Range (Subscription Expiry)
+                  Date Range (Subscription Date)
                 </label>
                 <div style={{ display: "flex", gap: "12px" }}>
                   <div style={{ flex: 1 }}>
