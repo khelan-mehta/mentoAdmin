@@ -157,7 +157,7 @@ const getInvoiceTrackingData = (): InvoiceTrackingData => {
         subscriptionInvoices: parsed.subscriptionInvoices || {},
       };
     }
-  } catch {}
+  } catch { }
   return { counter: 0, subscriptionInvoices: {} };
 };
 
@@ -443,7 +443,7 @@ const InvoiceExportModal = ({
       // ISO string or other parseable date string
       const d = new Date(dateValue);
       if (!isNaN(d.getTime())) return d;
-    } catch {}
+    } catch { }
     return null;
   };
 
@@ -548,7 +548,7 @@ const InvoiceExportModal = ({
         return {
           invoiceNumber:
             getInvoiceNumber(subId) ||
-              `MENTO/FY${getCurrentFinancialYear()}/00000`,
+            `MENTO/FY${getCurrentFinancialYear()}/00000`,
           invoiceDate: invoiceDate,
           customerName: sub.full_name || sub.name || "N/A",
           customerEmail: sub.user_email || "N/A",
@@ -598,7 +598,7 @@ const InvoiceExportModal = ({
         ["GSTIN", COMPANY_INFO.gstin],
         ["Phone", COMPANY_INFO.phone],
         [""],
-        ["Report Generated On", invoiceDate.toLocaleString()],
+
         [
           "GST Type",
           gstType === "auto"
@@ -845,8 +845,8 @@ const InvoiceExportModal = ({
       );
 
       // Generate filename
-      const timestamp = invoiceDate.toISOString().split("T")[0];
-      const filename = `subscription-invoices-${timestamp}.xlsx`;
+      
+      const filename = `subscription-invoices.xlsx`;
 
       // Save file
       XLSX.writeFile(workbook, filename);
@@ -2756,8 +2756,8 @@ const CreateSubscriptionModal = ({
                           transition: "background 0.15s",
                         }}
                         onMouseEnter={(e) =>
-                          (e.currentTarget.style.background =
-                            theme.colors.background)
+                        (e.currentTarget.style.background =
+                          theme.colors.background)
                         }
                         onMouseLeave={(e) =>
                           (e.currentTarget.style.background = "transparent")
@@ -3789,8 +3789,8 @@ export const Subscriptions = () => {
                         transition: "background 0.2s",
                       }}
                       onMouseEnter={(e) =>
-                        (e.currentTarget.style.background =
-                          theme.colors.background)
+                      (e.currentTarget.style.background =
+                        theme.colors.background)
                       }
                       onMouseLeave={(e) =>
                         (e.currentTarget.style.background = "transparent")
