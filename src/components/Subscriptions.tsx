@@ -513,13 +513,17 @@ const InvoiceExportModal = ({
         return;
       }
 
-      const invoiceDate = new Date();
-
       // Create invoice data with GST-inclusive calculation (full precision, no rounding)
       const invoiceData: InvoiceItem[] = filtered.map((sub) => {
         const plan = (sub.subscription_plan || "free").toLowerCase();
         const planPrice = planPricing[plan] || 0;
         const subId = sub.id || sub._id?.$oid || "";
+
+        // Use the subscription creation date as the invoice date
+        const createdDate = parseDateValue(sub.created_at);
+        const invoiceDate = createdDate
+          ? formatDate(sub.created_at)
+          : new Date().toISOString().split("T")[0];
 
         // Determine inter/intra state per subscription using state + pincode
         const userState = (sub.kyc_state || "").trim();
@@ -545,7 +549,7 @@ const InvoiceExportModal = ({
           invoiceNumber:
             getInvoiceNumber(subId) ||
               `MENTO/FY${getCurrentFinancialYear()}/00000`,
-          invoiceDate: invoiceDate.toISOString().split("T")[0],
+          invoiceDate: invoiceDate,
           customerName: sub.full_name || sub.name || "N/A",
           customerEmail: sub.user_email || "N/A",
           customerPhone: sub.user_mobile || "N/A",
